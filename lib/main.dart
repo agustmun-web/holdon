@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:holdon/services/sensor_service.dart';
 
 void main() {
+  runApp(const MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  startSensorReading(); // <-- Llama aquí a la función
   runApp(const MyApp());
 }
 
