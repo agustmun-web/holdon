@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 class CentralControl extends StatefulWidget {
   final bool isActive;
+  final bool isAlarmActive;
   final VoidCallback onTap;
   final Function(VoidCallback)? onAnimationCallback;
 
   const CentralControl({
     super.key,
     required this.isActive,
+    required this.isAlarmActive,
     required this.onTap,
     this.onAnimationCallback,
   });
@@ -99,9 +101,11 @@ class _CentralControlState extends State<CentralControl>
           child: AnimatedBuilder(
             animation: _scaleAnimation,
             builder: (context, child) {
-              final currentColor = widget.isActive 
-                ? const Color(0xFF38B05F) 
-                : const Color(0xFFFF5B5B);
+              final currentColor = widget.isAlarmActive
+                ? const Color(0xFFFF8C00) // Naranja para alarma
+                : widget.isActive 
+                  ? const Color(0xFF23C25D) // Verde para activo
+                  : const Color(0xFFFF5B5B); // Rojo para inactivo
               
               return Transform.scale(
                 scale: _scaleAnimation.value,
@@ -127,49 +131,81 @@ class _CentralControlState extends State<CentralControl>
                         return const SizedBox.shrink();
                       },
                     ),
-                    // Botón principal
+                    // Botón principal con triple borde
                     Container(
-                      width: 144,
-                      height: 144,
+                      width: 176,
+                      height: 176,
                       decoration: BoxDecoration(
-                        color: currentColor,
                         shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: currentColor.withValues(alpha: 0.3),
-                            blurRadius: 20,
-                            spreadRadius: 5,
-                          ),
-                        ],
+                        border: widget.isActive ? Border.all(
+                          color: const Color(0xFF0E1720),
+                          width: 4,
+                        ) : null,
                       ),
-                      child: Stack(
-                        children: [
-                          // Círculos concéntricos de fondo
-                          ...List.generate(3, (index) {
-                            return Positioned.fill(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: currentColor.withValues(alpha: 0.1),
-                                    width: 1,
+                      child: Center(
+                        child: Container(
+                          width: 160,
+                          height: 160,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: widget.isActive ? Border.all(
+                              color: const Color(0xFF162028),
+                              width: 4,
+                            ) : null,
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 144,
+                              height: 144,
+                              decoration: BoxDecoration(
+                                color: currentColor,
+                                shape: BoxShape.circle,
+                                border: widget.isActive ? Border.all(
+                                  color: const Color(0xFF122421),
+                                  width: 4,
+                                ) : null,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: currentColor.withValues(alpha: 0.3),
+                                    blurRadius: 20,
+                                    spreadRadius: 5,
                                   ),
-                                ),
-                                margin: EdgeInsets.all(20.0 * (index + 1)),
+                                ],
                               ),
-                            );
-                          }),
+                              child: Stack(
+                                children: [
+                                  // Círculos concéntricos de fondo
+                                  ...List.generate(3, (index) {
+                                    return Positioned.fill(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: currentColor.withValues(alpha: 0.1),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        margin: EdgeInsets.all(20.0 * (index + 1)),
+                                      ),
+                                    );
+                                  }),
                           // Icono central
                           Center(
                             child: Icon(
-                              widget.isActive 
-                                ? Icons.security 
-                                : Icons.power_settings_new,
+                              widget.isAlarmActive
+                                ? Icons.warning_amber_rounded
+                                : widget.isActive 
+                                  ? Icons.security 
+                                  : Icons.power_settings_new,
                               color: Colors.white,
                               size: 48,
                             ),
                           ),
-                        ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -180,16 +216,28 @@ class _CentralControlState extends State<CentralControl>
         ),
         const SizedBox(height: 16),
         Text(
-          widget.isActive ? 'Activo' : 'Monitoreo pausado',
+          widget.isAlarmActive 
+            ? 'ALARMA ACTIVADA' 
+            : widget.isActive 
+              ? 'Activo' 
+              : 'Monitoreo pausado',
           style: TextStyle(
-            color: widget.isActive ? const Color(0xFF38B05F) : const Color(0xFFFF5B5B),
+            color: widget.isAlarmActive
+              ? const Color(0xFFFF8C00)
+              : widget.isActive 
+                ? const Color(0xFF23C25D) 
+                : const Color(0xFFFF5B5B),
             fontSize: 20,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 8),
         Text(
-          widget.isActive ? 'Toque para desactivar' : 'Toque para activar',
+          widget.isAlarmActive 
+            ? 'Toque para detener alarma'
+            : widget.isActive 
+              ? 'Toque para desactivar' 
+              : 'Toque para activar',
           style: TextStyle(
             color: Colors.grey[600],
             fontSize: 14,

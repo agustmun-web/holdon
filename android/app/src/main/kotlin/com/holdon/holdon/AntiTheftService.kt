@@ -22,11 +22,11 @@ class AntiTheftService : Service(), SensorEventListener {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "holdon_antitheft_channel"
         private const val TAG = "AntiTheftService"
-        
-        // Umbrales de detección
-        private const val ACCELERATION_THRESHOLD = 50.0
-        private const val GYROSCOPE_THRESHOLD = 9.0
     }
+    
+    // Umbrales de detección variables (por defecto NORMAL)
+    private var accelerationThreshold = 50.0
+    private var gyroscopeThreshold = 9.0
     
     private var sensorManager: SensorManager? = null
     private var accelerometer: Sensor? = null
@@ -46,6 +46,39 @@ class AntiTheftService : Service(), SensorEventListener {
     
     // Binder para comunicación con la actividad
     private val binder = LocalBinder()
+    
+    /**
+     * Actualiza los umbrales de detección según el nivel de sensibilidad
+     * 
+     * @param level Nivel de sensibilidad: "BAJA", "NORMAL", o "ALTA"
+     */
+    fun updateThresholdsByLevel(level: String) {
+        when (level.uppercase()) {
+            "BAJA" -> {
+                // Sensibilidad baja = umbrales altos (más difícil de disparar)
+                accelerationThreshold = 80.0
+                gyroscopeThreshold = 14.4
+                Log.d(TAG, "🔧 Sensibilidad BAJA: Aceleración=${accelerationThreshold}, Giroscopio=${gyroscopeThreshold}")
+            }
+            "NORMAL" -> {
+                // Sensibilidad normal = umbrales intermedios
+                accelerationThreshold = 50.0
+                gyroscopeThreshold = 9.0
+                Log.d(TAG, "🔧 Sensibilidad NORMAL: Aceleración=${accelerationThreshold}, Giroscopio=${gyroscopeThreshold}")
+            }
+            "ALTA" -> {
+                // Sensibilidad alta = umbrales bajos (más fácil de disparar)
+                accelerationThreshold = 30.0
+                gyroscopeThreshold = 5.4
+                Log.d(TAG, "🔧 Sensibilidad ALTA: Aceleración=${accelerationThreshold}, Giroscopio=${gyroscopeThreshold}")
+            }
+            else -> {
+                Log.w(TAG, "⚠️ Nivel de sensibilidad desconocido: $level. Usando NORMAL por defecto.")
+                accelerationThreshold = 50.0
+                gyroscopeThreshold = 9.0
+            }
+        }
+    }
     
     inner class LocalBinder : Binder() {
         fun getService(): AntiTheftService = this@AntiTheftService
@@ -350,7 +383,7 @@ class AntiTheftService : Service(), SensorEventListener {
                 }
                 
                 // Verificar umbral
-                if (magnitude > ACCELERATION_THRESHOLD) {
+                if (magnitude > accelerationThreshold) {
                     checkForTheftDetection("accelerometer", magnitude)
                 }
             }
@@ -372,7 +405,7 @@ class AntiTheftService : Service(), SensorEventListener {
                 }
                 
                 // Verificar umbral
-                if (magnitude > GYROSCOPE_THRESHOLD) {
+                if (magnitude > gyroscopeThreshold) {
                     checkForTheftDetection("gyroscope", magnitude)
                 }
             }

@@ -17,7 +17,7 @@ class MyApp extends StatelessWidget {
       title: 'HoldOn! Anti-Theft App',
       theme: ThemeData(
         primarySwatch: Colors.green,
-        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+        scaffoldBackgroundColor: const Color(0xFF0E1720),
         fontFamily: 'Roboto',
       ),
       home: const MainScreen(),
@@ -50,23 +50,33 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: _onTabTapped,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: const Color(0xFF34A853),
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.security),
-            label: 'Seguridad',
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: Color(0xFF27323A),
+              width: 1,
+            ),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map),
-            label: 'Mapa',
-          ),
-        ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: _onTabTapped,
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: const Color(0xFF061414),
+          selectedItemColor: const Color(0xFF34A853),
+          unselectedItemColor: Colors.grey[400],
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.security),
+              label: 'Seguridad',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.map),
+              label: 'Mapa',
+            ),
+          ],
+        ),
       ),
     );
   }

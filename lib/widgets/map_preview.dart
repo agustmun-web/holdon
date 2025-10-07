@@ -236,10 +236,14 @@ class _MapPreviewState extends State<MapPreview> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 200,
+      height: 140,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF27323A),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -312,8 +316,8 @@ class _MapPreviewState extends State<MapPreview> {
                     GestureDetector(
                       onTap: _goToMyLocation,
                       child: Container(
-                        width: 40,
-                        height: 40,
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
@@ -328,7 +332,7 @@ class _MapPreviewState extends State<MapPreview> {
                         child: const Icon(
                           Icons.my_location,
                           color: Color(0xFF202124),
-                          size: 20,
+                          size: 16,
                         ),
                       ),
                     ),
@@ -337,8 +341,8 @@ class _MapPreviewState extends State<MapPreview> {
                     GestureDetector(
                       onTap: _zoomIn,
                       child: Container(
-                        width: 40,
-                        height: 40,
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
@@ -353,7 +357,7 @@ class _MapPreviewState extends State<MapPreview> {
                         child: const Icon(
                           Icons.add,
                           color: Color(0xFF202124),
-                          size: 20,
+                          size: 16,
                         ),
                       ),
                     ),
@@ -362,8 +366,8 @@ class _MapPreviewState extends State<MapPreview> {
                     GestureDetector(
                       onTap: _zoomOut,
                       child: Container(
-                        width: 40,
-                        height: 40,
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
@@ -378,7 +382,7 @@ class _MapPreviewState extends State<MapPreview> {
                         child: const Icon(
                           Icons.remove,
                           color: Color(0xFF202124),
-                          size: 20,
+                          size: 16,
                         ),
                       ),
                     ),

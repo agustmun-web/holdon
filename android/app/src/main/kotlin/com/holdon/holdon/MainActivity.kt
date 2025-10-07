@@ -67,6 +67,9 @@ class MainActivity : FlutterActivity() {
                 "getSensorStatus" -> {
                     getSensorStatus(result)
                 }
+                "setSensitivityLevel" -> {
+                    setSensitivityLevel(call, result)
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -198,6 +201,20 @@ class MainActivity : FlutterActivity() {
             result.success(status)
         } catch (e: Exception) {
             result.error("STATUS_GET_FAILED", "Failed to get sensor status: ${e.message}", null)
+        }
+    }
+    
+    private fun setSensitivityLevel(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            val level = call.argument<String>("level")
+            if (level != null) {
+                antiTheftService?.updateThresholdsByLevel(level)
+                result.success("Sensitivity level set to: $level")
+            } else {
+                result.error("INVALID_ARGUMENT", "Level parameter is required", null)
+            }
+        } catch (e: Exception) {
+            result.error("SENSITIVITY_SET_FAILED", "Failed to set sensitivity level: ${e.message}", null)
         }
     }
     

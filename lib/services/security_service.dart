@@ -101,6 +101,18 @@ class SecurityService {
     await _requestAdminPermission();
   }
   
+  /// Establece el nivel de sensibilidad del sistema
+  /// 
+  /// [level] - Nivel de sensibilidad: "BAJA", "NORMAL", o "ALTA"
+  Future<void> setSensitivityLevel(String level) async {
+    try {
+      await _platformChannel.invokeMethod('setSensitivityLevel', {'level': level});
+      print('✅ Nivel de sensibilidad establecido: $level');
+    } catch (e) {
+      print('❌ Error al establecer nivel de sensibilidad: $e');
+    }
+  }
+  
   
   /// Solicita permisos de administrador de dispositivos
   Future<void> _requestAdminPermission() async {

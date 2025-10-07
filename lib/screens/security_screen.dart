@@ -18,10 +18,7 @@ class SecurityScreen extends StatefulWidget {
 
 class _SecurityScreenState extends State<SecurityScreen> {
   bool isActive = true;
-  String sirenLevel = 'Medio';
-  bool vibrationEnabled = true;
-  int sensitivity = 70;
-  bool _isMenuOpen = false;
+  double sensitivity = 0.5;
   
   // Servicio de seguridad
   final SecurityService _securityService = SecurityService();
@@ -43,6 +40,8 @@ class _SecurityScreenState extends State<SecurityScreen> {
     _checkAdminPermissions();
     // Activar el sistema de seguridad al inicializar la pantalla
     _securityService.activateSecurity(showSensorValues: true);
+    // Establecer sensibilidad normal por defecto
+    _securityService.setSensitivityLevel("NORMAL");
     
     // Timer para actualizar la UI cada segundo (para mostrar estado de alarma)
     _uiUpdateTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -65,28 +64,11 @@ class _SecurityScreenState extends State<SecurityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: isActive ? const Color(0xFFE1F4ED) : const Color(0xFFFFF5F5),
+      backgroundColor: isActive ? const Color(0xFF0E1720) : const Color(0xFF0E1720),
       body: Stack(
         children: [
           // Contenido principal
           _buildMainContent(),
-          // Overlay para cerrar menú al tocar fuera
-          if (_isMenuOpen)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isMenuOpen = false;
-                  });
-                },
-                child: Container(
-                  color: Colors.transparent,
-                ),
-              ),
-            ),
-          // Menú popup
-          if (_isMenuOpen)
-            _buildSirenMenu(),
         ],
       ),
     );
@@ -105,7 +87,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   child: Text(
                     'Seguridad',
                     style: TextStyle(
-                      color: Color(0xFF202124),
+                      color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
                     ),
@@ -123,9 +105,23 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     child: Container(
                       width: 36,
                       height: 36,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFE1F4ED),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF061B17),
                         shape: BoxShape.circle,
+                        border: Border.fromBorderSide(
+                          const BorderSide(
+                            color: Color(0xFF0C1E1C),
+                            width: 2,
+                          ),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0C1E1C).withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                            offset: const Offset(0, 0),
+                          ),
+                        ],
                       ),
                       child: const Icon(
                         Icons.settings_outlined,
@@ -141,12 +137,15 @@ class _SecurityScreenState extends State<SecurityScreen> {
           // Contenido principal
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 32.0),
+              padding: const EdgeInsets.fromLTRB(8.0, 0, 8.0, 8.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Card de actividad reciente
-                  const ActivityCard(),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    child: const ActivityCard(),
+                  ),
                   
                   const SizedBox(height: 24),
                   
@@ -154,17 +153,28 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   Center(
                     child: CentralControl(
                       isActive: isActive,
-                      onTap: () {
-                        // Callback del botón principal - cambiar estado a Pausado/Inactivo
-                        setState(() {
-                          isActive = !isActive;
-                        });
-                        
-                        // Activar/desactivar el sistema de seguridad real
-                        if (isActive) {
-                          _securityService.activateSecurity(showSensorValues: true);
-                        } else {
+                      isAlarmActive: _securityService.isAlarmActive,
+                      onTap: () async {
+                        // Si hay alarma activa, detener la alarma y desactivar el sistema
+                        if (_securityService.isAlarmActive) {
+                          await _securityService.stopAlarmOnly();
+                          // Desactivar el sistema de seguridad (botón rojo)
+                          setState(() {
+                            isActive = false;
+                          });
                           _securityService.deactivateSecurity();
+                        } else {
+                          // Callback del botón principal - cambiar estado a Pausado/Inactivo
+                          setState(() {
+                            isActive = !isActive;
+                          });
+                          
+                          // Activar/desactivar el sistema de seguridad real
+                          if (isActive) {
+                            _securityService.activateSecurity(showSensorValues: true);
+                          } else {
+                            _securityService.deactivateSecurity();
+                          }
                         }
                       },
                       onAnimationCallback: (callback) {
@@ -179,101 +189,59 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   Center(
                     child: Column(
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: isActive ? const Color(0xFF38B05F) : const Color(0xFFFF5B5B),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              isActive ? 'Sistema seguro y monitoreando' : 'Monitoreo pausado',
-                              style: TextStyle(
-                                color: Color(0xFF202124),
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                        // Mostrar estado de alarma si está sonando
-                        if (_securityService.isAlarmActive) ...[
-                          const SizedBox(height: 16),
-                          Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 16),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.red.shade200, width: 2),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.warning_amber_rounded, color: Colors.red.shade600, size: 24),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'ALARMA ACTIVADA',
-                                            style: TextStyle(
-                                              color: Colors.red.shade800,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Dispositivo posiblemente robado',
-                                            style: TextStyle(
-                                              color: Colors.red.shade700,
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton.icon(
-                                    onPressed: () async {
-                                      await _securityService.stopAlarmOnly();
-                                      setState(() {}); // Refrescar UI
-                                    },
-                                    icon: const Icon(Icons.stop, color: Colors.white),
-                                    label: const Text(
-                                      'DETENER ALARMA',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red.shade600,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _securityService.isAlarmActive 
+                              ? const Color(0xFF2A1A0A) // Naranja oscuro para alarma
+                              : isActive 
+                                ? const Color(0xFF061B17) // Verde oscuro para activo
+                                : const Color(0xFF2A1A1A), // Rojo oscuro para inactivo
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                        ],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: _securityService.isAlarmActive
+                                    ? const Color(0xFFFF8C00) // Naranja para alarma
+                                    : isActive 
+                                      ? const Color(0xFF21C55E) // Verde para activo
+                                      : const Color(0xFFFF5B5B), // Rojo para inactivo
+                                  border: Border.all(
+                                    color: _securityService.isAlarmActive
+                                      ? const Color(0xFF4A1A0A) // Naranja muy oscuro para alarma
+                                      : isActive 
+                                        ? const Color(0xFF0B3622) // Verde muy oscuro para activo
+                                        : const Color(0xFF4A1A1A), // Rojo muy oscuro para inactivo
+                                    width: 2,
+                                  ),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _securityService.isAlarmActive
+                                  ? 'Dispositivo posiblemente robado'
+                                  : isActive 
+                                    ? 'Sistema seguro y monitoreando' 
+                                    : 'Monitoreo pausado',
+                                style: TextStyle(
+                                  color: _securityService.isAlarmActive
+                                    ? const Color(0xFFFFB366) // Naranja claro para alarma
+                                    : isActive 
+                                      ? const Color(0xFF9BE7C8) // Verde claro para activo
+                                      : const Color(0xFFFFB3B3), // Rojo claro para inactivo
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -281,83 +249,60 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   // Widget de sistema desactivado (solo cuando está desactivado)
                   if (!isActive) ...[
                     const SizedBox(height: 24),
-                    DeactivatedSystemWidget(
-                      onReactivateNow: () {
-                        // Activar el sistema
-                        setState(() {
-                          isActive = true;
-                        });
-                        
-                        // Activar el sistema de seguridad real
-                        _securityService.activateSecurity(showSensorValues: true);
-                        
-                        // Activar las animaciones del botón central
-                        _onCentralButtonAnimation?.call();
-                        
-                        // Feedback háptico para confirmar la activación
-                        HapticFeedback.mediumImpact();
-                      },
-                      onScheduleReactivation: _showSchedulePopup,
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      child: DeactivatedSystemWidget(
+                        onReactivateNow: () {
+                          // Activar el sistema
+                          setState(() {
+                            isActive = true;
+                          });
+                          
+                          // Activar el sistema de seguridad real
+                          _securityService.activateSecurity(showSensorValues: true);
+                          
+                          // Activar las animaciones del botón central
+                          _onCentralButtonAnimation?.call();
+                          
+                          // Feedback háptico para confirmar la activación
+                          HapticFeedback.mediumImpact();
+                        },
+                        onScheduleReactivation: _showSchedulePopup,
+                      ),
                     ),
                   ],
                   
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   
-                  // Cards de control de características
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FeatureControlCard(
-                          title: 'Volumen de sirena',
-                          value: sirenLevel,
-                          icon: Icons.notifications_outlined,
-                          onTap: () {
-                            setState(() {
-                              _isMenuOpen = true;
-                            });
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FeatureControlCard(
-                          title: 'Alertas hápticas',
-                          value: vibrationEnabled ? 'On' : 'Off',
-                          icon: Icons.vibration,
-                          onTap: () async {
-                            setState(() {
-                              vibrationEnabled = !vibrationEnabled;
-                            });
-                            
-                            // Vibración como notificación usando HapticFeedback
-                            try {
-                              HapticFeedback.mediumImpact();
-                              debugPrint('📳 Vibración ejecutada correctamente - Tipo: mediumImpact');
-                            } catch (e) {
-                              // Si la vibración no está disponible, continuar sin error
-                              debugPrint('❌ Error en vibración: $e');
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FeatureControlCard(
-                          title: 'Sensibilidad',
-                          value: '$sensitivity%',
-                          icon: Icons.graphic_eq,
-                          onTap: () {
-                            _showSensitivityDialog();
-                          },
-                        ),
-                      ),
-                    ],
+                  // Card de control de sensibilidad
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0D131C),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: FeatureControlCard(
+                      title: 'Sensibilidad',
+                      value: sensitivity,
+                      icon: Icons.graphic_eq,
+                      onChanged: (value) {
+                        setState(() {
+                          sensitivity = value;
+                        });
+                      },
+                    ),
                   ),
                   
                   const SizedBox(height: 16),
                   
                   // Vista previa del mapa
-                  const MapPreview(),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    child: const MapPreview(),
+                  ),
+                  
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -366,244 +311,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
       );
   }
 
-  // Método para controlar el volumen real del sistema usando plugin nativo
-  Future<void> _setSystemVolume(String level) async {
-    double volume;
-    switch (level) {
-      case 'Bajo':
-        volume = 0.8; // 80%
-        break;
-      case 'Medio':
-        volume = 0.5; // 50%
-        break;
-      case 'Alto':
-        volume = 1.0; // 100%
-        break;
-      default:
-        volume = 0.5;
-    }
-    
-    try {
-      // Control real del volumen del sistema usando plugin nativo
-      const platform = MethodChannel('volume_controller');
-      await platform.invokeMethod('setVolume', {'volume': volume});
-      
-      debugPrint('🔊 Volumen del sistema configurado: $level (${(volume * 100).toInt()}%)');
-      debugPrint('✅ Control de volumen nativo implementado correctamente');
-      
-      // Feedback háptico para confirmar la configuración
-      switch (level) {
-        case 'Bajo':
-          HapticFeedback.lightImpact();
-          break;
-        case 'Medio':
-          HapticFeedback.mediumImpact();
-          break;
-        case 'Alto':
-          HapticFeedback.heavyImpact();
-          break;
-      }
-      
-    } catch (e) {
-      debugPrint('❌ Error al configurar volumen del sistema: $e');
-      debugPrint('🔄 Intentando método alternativo...');
-      
-      // Fallback: simulación si el plugin nativo falla
-      try {
-        await Future.delayed(const Duration(milliseconds: 200));
-        debugPrint('🔊 Volumen simulado: $level (${(volume * 100).toInt()}%)');
-        HapticFeedback.mediumImpact();
-      } catch (e2) {
-        debugPrint('❌ Error en método alternativo: $e2');
-      }
-    }
-  }
 
-  Widget _buildSirenMenu() {
-    return Center(
-      child: GestureDetector(
-        onTap: () {
-          // Prevenir que el tap se propague al overlay
-        },
-        child: Container(
-          margin: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withValues(alpha: 0.3),
-                blurRadius: 20,
-                spreadRadius: 5,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text(
-                'Volumen de sirena',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-                ),
-                const SizedBox(height: 16),
-                
-                // Indicador de permisos de administrador
-                if (!_hasAdminPermissions) ...[
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning_amber, color: Colors.orange.shade600, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Permisos de Administrador Requeridos',
-                                style: TextStyle(
-                                  color: Colors.orange.shade800,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Para bloquear la pantalla durante la alarma',
-                                style: TextStyle(
-                                  color: Colors.orange.shade700,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () async {
-                            await _securityService.requestAdminPermission();
-                            // Verificar permisos después de un breve delay
-                            Future.delayed(const Duration(seconds: 2), () {
-                              _checkAdminPermissions();
-                            });
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange.shade600,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            minimumSize: Size.zero,
-                          ),
-                          child: const Text('Otorgar', style: TextStyle(fontSize: 12)),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-            // Opción Bajo
-            GestureDetector(
-              onTap: () async {
-                setState(() {
-                  sirenLevel = 'Bajo';
-                  _isMenuOpen = false;
-                });
-                await _setSystemVolume('Bajo');
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                margin: const EdgeInsets.only(bottom: 12, left: 20, right: 20),
-                decoration: BoxDecoration(
-                  color: sirenLevel == 'Bajo' ? Colors.black : Colors.grey[300],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Bajo',
-                  style: TextStyle(
-                    color: sirenLevel == 'Bajo' ? Colors.white : Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-            // Opción Medio
-            GestureDetector(
-              onTap: () async {
-                setState(() {
-                  sirenLevel = 'Medio';
-                  _isMenuOpen = false;
-                });
-                await _setSystemVolume('Medio');
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                margin: const EdgeInsets.only(bottom: 12, left: 20, right: 20),
-                decoration: BoxDecoration(
-                  color: sirenLevel == 'Medio' ? Colors.black : Colors.grey[300],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Medio',
-                  style: TextStyle(
-                    color: sirenLevel == 'Medio' ? Colors.white : Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-            // Opción Alto
-            GestureDetector(
-              onTap: () async {
-                setState(() {
-                  sirenLevel = 'Alto';
-                  _isMenuOpen = false;
-                });
-                await _setSystemVolume('Alto');
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
-                decoration: BoxDecoration(
-                  color: sirenLevel == 'Alto' ? Colors.black : Colors.grey[300],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Alto',
-                  style: TextStyle(
-                    color: sirenLevel == 'Alto' ? Colors.white : Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ],
-        ),
-        ),
-      ),
-    );
-  }
 
 
   void _showSensitivityDialog() {
@@ -615,14 +323,14 @@ class _SecurityScreenState extends State<SecurityScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Slider(
-              value: sensitivity.toDouble(),
+              value: sensitivity * 100,
               min: 0,
               max: 100,
               divisions: 20,
-              label: '$sensitivity%',
+              label: '${(sensitivity * 100).round()}%',
               onChanged: (value) {
                 setState(() {
-                  sensitivity = value.round();
+                  sensitivity = value / 100;
                 });
               },
             ),

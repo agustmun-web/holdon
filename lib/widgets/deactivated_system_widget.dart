@@ -16,26 +16,17 @@ class DeactivatedSystemWidget extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(50),
+        color: const Color(0xFF0D131C),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF27323A),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
-          ),
-          // Efecto glow
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.2),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: const Offset(0, 0),
-          ),
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
-            blurRadius: 30,
-            spreadRadius: 5,
-            offset: const Offset(0, 0),
           ),
         ],
       ),
@@ -44,14 +35,14 @@ class DeactivatedSystemWidget extends StatelessWidget {
         children: [
           // Título centrado
           Center(
-            child: Text(
-              'Sistema Desactivado',
-              style: const TextStyle(
-                color: Color(0xFF202124),
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
+            child:               Text(
+                'Sistema Desactivado',
+                style: const TextStyle(
+                  color: Color(0xFF9BE7C8),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
           ),
           
           const SizedBox(height: 12),
@@ -59,8 +50,8 @@ class DeactivatedSystemWidget extends StatelessWidget {
           // Texto descriptivo
           Text(
             'Todos los sensores han sido desactivados, no recibirás alertas hasta reactivar el sistema',
-            style: TextStyle(
-              color: Colors.grey[600],
+            style: const TextStyle(
+              color: Color(0xFF9BE7C8),
               fontSize: 14,
               height: 1.4,
             ),
@@ -77,13 +68,13 @@ class DeactivatedSystemWidget extends StatelessWidget {
                 child: GestureDetector(
                   onTap: onScheduleReactivation,
                   child: Container(
-                    height: 48,
+                    height: 50,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(50),
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: Colors.grey[300]!,
+                        color: const Color(0xFF27323A),
                         width: 1,
                       ),
                     ),
@@ -92,26 +83,27 @@ class DeactivatedSystemWidget extends StatelessWidget {
                       children: [
                         const Icon(
                           Icons.access_time,
-                          color: Color(0xFF202124),
+                          color: Color(0xFF9BE7C8),
                           size: 18,
                         ),
                         const SizedBox(width: 8),
                         const Column(
                           mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               'Programar',
                               style: TextStyle(
-                                color: Color(0xFF202124),
-                                fontSize: 14,
+                                color: Color(0xFF9BE7C8),
+                                fontSize: 12,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                             Text(
                               'reactivación',
                               style: TextStyle(
-                                color: Color(0xFF202124),
-                                fontSize: 14,
+                                color: Color(0xFF9BE7C8),
+                                fontSize: 12,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -130,11 +122,11 @@ class DeactivatedSystemWidget extends StatelessWidget {
                 child: GestureDetector(
                   onTap: onReactivateNow,
                   child: Container(
-                    height: 48,
+                    height: 50,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF34A853),
-                      borderRadius: BorderRadius.circular(50),
+                      color: const Color(0xFF23C55E),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,

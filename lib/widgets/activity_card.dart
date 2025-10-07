@@ -8,13 +8,23 @@ class ActivityCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(100),
+        color: const Color(0xFF0C1413),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: const Color(0xFF242E37),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
+          ),
+          BoxShadow(
+            color: const Color(0xFF242E37).withValues(alpha: 0.3),
+            blurRadius: 15,
+            spreadRadius: 2,
+            offset: const Offset(0, 0),
           ),
         ],
       ),
@@ -30,13 +40,15 @@ class ActivityCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
-                'Moderate',
+                'Media',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w500,
                 ),
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
@@ -50,7 +62,7 @@ class ActivityCard extends StatelessWidget {
                 const Text(
                   'Zona con actividad reciente',
                   style: TextStyle(
-                    color: Color(0xFF202124),
+                    color: Color(0xFF9BE7C8),
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
@@ -59,7 +71,7 @@ class ActivityCard extends StatelessWidget {
                 const Text(
                   '2 hotspots a 1.2 km • Última alerta hace 30 min',
                   style: TextStyle(
-                    color: Color(0xFF6E7C7E),
+                    color: Color(0xFF9BE7C8),
                     fontSize: 12,
                   ),
                 ),
@@ -72,7 +84,7 @@ class ActivityCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: const BoxDecoration(
-              color: Color(0xFFE1F4ED),
+              color: Color(0xFF061B17),
               shape: BoxShape.circle,
             ),
             child: const Icon(
