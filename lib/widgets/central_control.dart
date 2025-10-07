@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 class CentralControl extends StatefulWidget {
   final bool isActive;
   final VoidCallback onTap;
+  final Function(VoidCallback)? onAnimationCallback;
 
   const CentralControl({
     super.key,
     required this.isActive,
     required this.onTap,
+    this.onAnimationCallback,
   });
 
   @override
@@ -48,6 +50,9 @@ class _CentralControlState extends State<CentralControl>
       parent: _glowController,
       curve: Curves.easeOut,
     ));
+
+    // Registrar el callback de animación
+    widget.onAnimationCallback?.call(triggerAnimations);
   }
 
   @override
@@ -58,19 +63,31 @@ class _CentralControlState extends State<CentralControl>
   }
 
   void _handleTap() {
-    // Iniciar animaciones
-    _scaleController.forward().then((_) {
-      _scaleController.reverse();
-    });
+    // Llamar al callback inmediatamente para evitar delays
+    widget.onTap();
     
-    _glowController.forward().then((_) {
-      _glowController.reverse();
-    });
+    // Iniciar animaciones
+    _triggerAnimations();
+  }
 
-    // Llamar al callback después de un breve delay
-    Future.delayed(const Duration(milliseconds: 100), () {
-      widget.onTap();
-    });
+  // Método público para activar las animaciones desde fuera
+  void triggerAnimations() {
+    _triggerAnimations();
+  }
+
+  void _triggerAnimations() {
+    // Iniciar animaciones de forma más eficiente con debounce
+    if (!_scaleController.isAnimating) {
+      _scaleController.forward().then((_) {
+        _scaleController.reverse();
+      });
+    }
+    
+    if (!_glowController.isAnimating) {
+      _glowController.forward().then((_) {
+        _glowController.reverse();
+      });
+    }
   }
 
   @override
@@ -80,7 +97,7 @@ class _CentralControlState extends State<CentralControl>
         GestureDetector(
           onTap: _handleTap,
           child: AnimatedBuilder(
-            animation: Listenable.merge([_scaleAnimation, _glowAnimation]),
+            animation: _scaleAnimation,
             builder: (context, child) {
               final currentColor = widget.isActive 
                 ? const Color(0xFF38B05F) 
@@ -91,18 +108,25 @@ class _CentralControlState extends State<CentralControl>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Resplandor
-                    if (_glowAnimation.value > 0)
-                      Container(
-                        width: 144 + (40 * _glowAnimation.value),
-                        height: 144 + (40 * _glowAnimation.value),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: currentColor.withValues(
-                            alpha: 0.3 * _glowAnimation.value,
-                          ),
-                        ),
-                      ),
+                    // Resplandor con AnimatedBuilder separado
+                    AnimatedBuilder(
+                      animation: _glowAnimation,
+                      builder: (context, child) {
+                        if (_glowAnimation.value > 0) {
+                          return Container(
+                            width: 144 + (40 * _glowAnimation.value),
+                            height: 144 + (40 * _glowAnimation.value),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: currentColor.withValues(
+                                alpha: 0.3 * _glowAnimation.value,
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
                     // Botón principal
                     Container(
                       width: 144,

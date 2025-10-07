@@ -18,82 +18,29 @@ class _MapScreenState extends State<MapScreen> {
   String _errorMessage = '';
   final Set<Marker> _markers = {};
   final Set<Circle> _circles = {};
-  double _currentZoom = 14.0;
   
-  // Estilo personalizado para ocultar completamente la marca de agua y texto de Google
-  static const String _mapStyle = '''
-  [
-    {
-      "featureType": "poi",
-      "elementType": "labels",
-      "stylers": [
-        {
-          "visibility": "off"
-        }
-      ]
-    },
-    {
-      "featureType": "poi.business",
-      "stylers": [
-        {
-          "visibility": "off"
-        }
-      ]
-    },
-    {
-      "featureType": "poi.park",
-      "elementType": "labels.text",
-      "stylers": [
-        {
-          "visibility": "off"
-        }
-      ]
-    },
-    {
-      "featureType": "all",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#000000",
-          "visibility": "off"
-        }
-      ]
-    },
-    {
-      "featureType": "all",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "visibility": "off"
-        }
-      ]
-    },
-    {
-      "featureType": "water",
-      "elementType": "labels",
-      "stylers": [
-        {
-          "visibility": "off"
-        }
-      ]
-    },
-    {
-      "featureType": "administrative",
-      "elementType": "labels",
-      "stylers": [
-        {
-          "visibility": "off"
-        }
-      ]
-    }
-  ]
-  ''';
+  // Ubicación por defecto (Madrid, España)
+  static const LatLng _defaultLocation = LatLng(40.4168, -3.7038);
 
   @override
   void initState() {
     super.initState();
-    _getCurrentLocation();
-    _circles.addAll(_createHotspotCircles());
+    _initializeMap();
+  }
+
+  Future<void> _initializeMap() async {
+    try {
+      await _getCurrentLocation();
+      _createDangerZones();
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error al inicializar el mapa: $e';
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -102,8 +49,7 @@ class _MapScreenState extends State<MapScreen> {
       final permission = await Permission.location.request();
       if (permission != PermissionStatus.granted) {
         setState(() {
-          _errorMessage = 'Permisos de ubicación denegados';
-          _isLoading = false;
+          _currentPosition = _defaultLocation;
         });
         return;
       }
@@ -112,8 +58,7 @@ class _MapScreenState extends State<MapScreen> {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         setState(() {
-          _errorMessage = 'Servicios de ubicación deshabilitados';
-          _isLoading = false;
+          _currentPosition = _defaultLocation;
         });
         return;
       }
@@ -121,13 +66,13 @@ class _MapScreenState extends State<MapScreen> {
       // Obtener la ubicación actual
       Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 10),
         ),
-      );
+      ).timeout(const Duration(seconds: 10));
 
       setState(() {
         _currentPosition = LatLng(position.latitude, position.longitude);
-        _isLoading = false;
       });
       
       // Centrar automáticamente en la ubicación del usuario
@@ -136,8 +81,7 @@ class _MapScreenState extends State<MapScreen> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error al obtener la ubicación: $e';
-        _isLoading = false;
+        _currentPosition = _defaultLocation;
       });
     }
   }
@@ -147,14 +91,15 @@ class _MapScreenState extends State<MapScreen> {
     
     // Centrar automáticamente en la ubicación del usuario al crear el mapa
     if (_currentPosition != null) {
-      _goToMyLocation();
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _goToMyLocation();
+      });
     }
   }
 
   void _goToMyLocation() async {
     if (_mapController != null && _currentPosition != null) {
       try {
-        // Centrar el mapa en la ubicación actual con animación
         await _mapController!.animateCamera(
           CameraUpdate.newCameraPosition(
             CameraPosition(
@@ -164,82 +109,47 @@ class _MapScreenState extends State<MapScreen> {
           ),
         );
         
-        // Feedback háptico para confirmar la acción
         HapticFeedback.lightImpact();
-        
-        debugPrint('📍 Mapa centrado en ubicación actual: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}');
       } catch (e) {
-        debugPrint('❌ Error al centrar el mapa: $e');
+        debugPrint('Error al centrar el mapa: $e');
       }
-    } else {
-      debugPrint('⚠️ No se puede centrar el mapa: controlador o ubicación no disponibles');
     }
   }
 
-  // Función para crear círculos de zonas de peligro
-  Set<Circle> _createHotspotCircles() {
-    // Círculo del Puente de Hierro
+  void _createDangerZones() {
+    // Círculo del Puente de Hierro (Madrid)
     final Circle puenteZone = Circle(
       circleId: const CircleId('puente_hierro_zone'),
-      center: const LatLng(40.9458, -4.1158), // Puente de Hierro
-      radius: 700, // 700 metros
-      fillColor: const Color(0x4DFF5B5B), // Rojo Coral con 30% opacidad
-      strokeColor: const Color(0xFFFF5B5B), // Rojo Coral sólido
+      center: const LatLng(40.9458, -4.1158),
+      radius: 700,
+      fillColor: const Color(0x4DFF5B5B),
+      strokeColor: const Color(0xFFFF5B5B),
       strokeWidth: 3,
     );
     
-    debugPrint('🚨 Zona de peligro Puente de Hierro creada: 40.9458, -4.1158');
-    debugPrint('📍 Radio Puente de Hierro: 700 metros');
-    debugPrint('🎨 Color: Rojo Coral (#FF5B5B) con 30% opacidad');
+    // Círculo del Centro Histórico (Madrid)
+    final Circle centroZone = Circle(
+      circleId: const CircleId('centro_historico_zone'),
+      center: const LatLng(40.4168, -3.7038),
+      radius: 500,
+      fillColor: const Color(0x4DFF5B5B),
+      strokeColor: const Color(0xFFFF5B5B),
+      strokeWidth: 3,
+    );
     
-    return {puenteZone};
-  }
-
-  // Método para hacer zoom in
-  void _zoomIn() async {
-    if (_mapController != null) {
-      try {
-        _currentZoom = (_currentZoom + 1).clamp(1.0, 20.0);
-        await _mapController!.animateCamera(
-          CameraUpdate.zoomTo(_currentZoom),
-        );
-        
-        HapticFeedback.lightImpact();
-        debugPrint('🔍 Zoom in: ${_currentZoom.toStringAsFixed(1)}');
-      } catch (e) {
-        debugPrint('❌ Error al hacer zoom in: $e');
-      }
-    }
-  }
-
-  // Método para hacer zoom out
-  void _zoomOut() async {
-    if (_mapController != null) {
-      try {
-        _currentZoom = (_currentZoom - 1).clamp(1.0, 20.0);
-        await _mapController!.animateCamera(
-          CameraUpdate.zoomTo(_currentZoom),
-        );
-        
-        HapticFeedback.lightImpact();
-        debugPrint('🔍 Zoom out: ${_currentZoom.toStringAsFixed(1)}');
-      } catch (e) {
-        debugPrint('❌ Error al hacer zoom out: $e');
-      }
-    }
+    _circles.addAll([puenteZone, centroZone]);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
       body: Stack(
         children: [
           // Mapa de Google Maps ocupando toda la pantalla
           if (_isLoading)
             const Center(
               child: CircularProgressIndicator(
-                color: Color(0xFF38B05F),
+                color: Color(0xFF34A853),
               ),
             )
           else if (_errorMessage.isNotEmpty)
@@ -248,26 +158,41 @@ class _MapScreenState extends State<MapScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(
-                    Icons.location_off,
-                    color: Colors.grey,
-                    size: 48,
+                    Icons.error_outline,
+                    color: Color(0xFFFF5B5B),
+                    size: 64,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   Text(
                     _errorMessage,
                     style: const TextStyle(
-                      color: Colors.grey,
+                      color: Color(0xFF5F6368),
                       fontSize: 16,
                     ),
                     textAlign: TextAlign.center,
                   ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _isLoading = true;
+                        _errorMessage = '';
+                      });
+                      _initializeMap();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF34A853),
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Reintentar'),
+                  ),
                 ],
               ),
             )
-          else if (_currentPosition != null)
+          else
             GoogleMap(
               initialCameraPosition: CameraPosition(
-                target: _currentPosition!,
+                target: _currentPosition ?? _defaultLocation,
                 zoom: 14.0,
               ),
               onMapCreated: _onMapCreated,
@@ -276,94 +201,25 @@ class _MapScreenState extends State<MapScreen> {
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
+              mapToolbarEnabled: false,
               mapType: MapType.normal,
               compassEnabled: true,
-              mapToolbarEnabled: false,
-              style: _mapStyle,
+              buildingsEnabled: true,
+              trafficEnabled: false,
             ),
-          // Botones de control del mapa (centrados horizontalmente en el lado derecho)
-          if (_currentPosition != null)
+          
+          // Botón flotante para centrar en mi ubicación
+          if (!_isLoading && _errorMessage.isEmpty)
             Positioned(
-              top: 50,
+              top: MediaQuery.of(context).padding.top + 16,
               right: 16,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Botón "Mi ubicación"
-                  GestureDetector(
-                    onTap: _goToMyLocation,
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.my_location,
-                        color: Color(0xFF202124),
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Botón Zoom In (+)
-                  GestureDetector(
-                    onTap: _zoomIn,
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.add,
-                        color: Color(0xFF202124),
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Botón Zoom Out (-)
-                  GestureDetector(
-                    onTap: _zoomOut,
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.remove,
-                        color: Color(0xFF202124),
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                ],
+              child: FloatingActionButton(
+                onPressed: _goToMyLocation,
+                backgroundColor: const Color(0xFF34A853),
+                child: const Icon(
+                  Icons.my_location,
+                  color: Colors.white,
+                ),
               ),
             ),
         ],

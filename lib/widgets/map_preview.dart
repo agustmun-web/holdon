@@ -147,7 +147,10 @@ class _MapPreviewState extends State<MapPreview> {
     
     // Centrar automáticamente en la ubicación del usuario al crear el mapa
     if (_currentPosition != null) {
-      _goToMyLocation();
+      // Usar un delay para evitar conflictos con ImageReader
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _goToMyLocation();
+      });
     }
   }
 
@@ -290,9 +293,11 @@ class _MapPreviewState extends State<MapPreview> {
                 myLocationEnabled: true,
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: false,
+                mapToolbarEnabled: false,
                 mapType: MapType.normal,
                 compassEnabled: true,
-                mapToolbarEnabled: false,
+                buildingsEnabled: false,
+                trafficEnabled: false,
                 style: _mapStyle,
               ),
             // Botones de control del mapa (centrados horizontalmente en el lado derecho)
@@ -388,7 +393,9 @@ class _MapPreviewState extends State<MapPreview> {
 
   @override
   void dispose() {
+    // Limpiar recursos del mapa para evitar warnings de ImageReader
     _mapController?.dispose();
+    _mapController = null;
     super.dispose();
   }
 }

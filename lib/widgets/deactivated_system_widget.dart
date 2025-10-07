@@ -146,7 +146,7 @@ class DeactivatedSystemWidget extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         const Text(
-                          'Reactivar ahora',
+                          'Reactivar',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 14,

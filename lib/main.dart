@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/security_screen.dart';
 import 'screens/map_screen.dart';
+import 'screens/sensor_test_screen.dart';
 
 void main() {
   // SOLO debe haber una llamada a runApp
@@ -37,7 +38,6 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
     const SecurityScreen(),
     const MapScreen(),
-    const SecurityScreen(), // Placeholder para Historial
   ];
 
   void _onTabTapped(int index) {
@@ -65,10 +65,6 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.map),
             label: 'Mapa',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: 'Historial',
           ),
         ],
       ),

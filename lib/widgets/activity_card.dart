@@ -51,7 +51,7 @@ class ActivityCard extends StatelessWidget {
                   'Zona con actividad reciente',
                   style: TextStyle(
                     color: Color(0xFF202124),
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -60,7 +60,7 @@ class ActivityCard extends StatelessWidget {
                   '2 hotspots a 1.2 km • Última alerta hace 30 min',
                   style: TextStyle(
                     color: Color(0xFF6E7C7E),
-                    fontSize: 14,
+                    fontSize: 12,
                   ),
                 ),
               ],
