@@ -10,7 +10,7 @@ void main() {
   setupBackgroundTask();
   
   // SOLO debe haber una llamada a runApp
-  runApp(const MyApp()); 
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
