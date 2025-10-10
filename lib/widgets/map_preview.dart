@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../services/geofence_service.dart';
 
 class MapPreview extends StatefulWidget {
   const MapPreview({super.key});
@@ -19,49 +20,17 @@ class _MapPreviewState extends State<MapPreview> {
   final Set<Marker> _markers = {};
   final Set<Circle> _circles = {};
   double _currentZoom = 12.0;
+  final GeofenceService _geofenceService = GeofenceService();
   
-  // Estilo personalizado para ocultar completamente la marca de agua y texto de Google
+  // Ubicación por defecto (Madrid, España)
+  static const LatLng _defaultLocation = LatLng(40.4168, -3.7038);
+  
+  // Estilo simplificado para reducir warnings de renderizado
   static const String _mapStyle = '''
   [
     {
       "featureType": "poi",
       "elementType": "labels",
-      "stylers": [
-        {
-          "visibility": "off"
-        }
-      ]
-    },
-    {
-      "featureType": "poi.business",
-      "stylers": [
-        {
-          "visibility": "off"
-        }
-      ]
-    },
-    {
-      "featureType": "poi.park",
-      "elementType": "labels.text",
-      "stylers": [
-        {
-          "visibility": "off"
-        }
-      ]
-    },
-    {
-      "featureType": "all",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#000000",
-          "visibility": "off"
-        }
-      ]
-    },
-    {
-      "featureType": "all",
-      "elementType": "labels.text.stroke",
       "stylers": [
         {
           "visibility": "off"
@@ -76,15 +45,6 @@ class _MapPreviewState extends State<MapPreview> {
           "visibility": "off"
         }
       ]
-    },
-    {
-      "featureType": "administrative",
-      "elementType": "labels",
-      "stylers": [
-        {
-          "visibility": "off"
-        }
-      ]
     }
   ]
   ''';
@@ -92,8 +52,31 @@ class _MapPreviewState extends State<MapPreview> {
   @override
   void initState() {
     super.initState();
-    _getCurrentLocation();
-    _circles.addAll(_createHotspotCircles());
+    _initializeMap();
+  }
+
+  Future<void> _initializeMap() async {
+    try {
+      // Crear hotspots primero
+      _createHotspotCircles();
+      
+      // Intentar obtener ubicación
+      await _getCurrentLocation();
+      
+      // Si no se pudo obtener ubicación, usar ubicación por defecto
+      if (_currentPosition == null) {
+        setState(() {
+          _currentPosition = _defaultLocation;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _currentPosition = _defaultLocation;
+        _isLoading = false;
+        _errorMessage = 'Error al inicializar el mapa: $e';
+      });
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -101,61 +84,79 @@ class _MapPreviewState extends State<MapPreview> {
       // Solicitar permisos de ubicación
       final permission = await Permission.location.request();
       if (permission != PermissionStatus.granted) {
-        setState(() {
-          _errorMessage = 'Permisos de ubicación denegados';
-          _isLoading = false;
-        });
-        return;
+        debugPrint('⚠️ Permisos de ubicación denegados en widget');
+        return; // No establecer error, usar ubicación por defecto
       }
 
       // Verificar si los servicios de ubicación están habilitados
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        setState(() {
-          _errorMessage = 'Servicios de ubicación deshabilitados';
-          _isLoading = false;
-        });
-        return;
+        debugPrint('⚠️ Servicios de ubicación deshabilitados en widget');
+        return; // No establecer error, usar ubicación por defecto
       }
 
-      // Obtener la ubicación actual
+      // Obtener la ubicación actual con timeout
       Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 5),
         ),
-      );
+      ).timeout(const Duration(seconds: 5));
 
       setState(() {
         _currentPosition = LatLng(position.latitude, position.longitude);
         _isLoading = false;
       });
       
+      debugPrint('📍 Ubicación obtenida en widget: ${position.latitude}, ${position.longitude}');
+      
       // Centrar automáticamente en la ubicación del usuario
-      if (_mapController != null) {
+      if (_mapController != null && mounted) {
         _goToMyLocation();
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Error al obtener la ubicación: $e';
-        _isLoading = false;
-      });
+      debugPrint('⚠️ Error al obtener ubicación en widget: $e');
+      // No establecer error, usar ubicación por defecto
     }
   }
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
     
-    // Centrar automáticamente en la ubicación del usuario al crear el mapa
+    debugPrint('🗺️ Mapa creado en widget');
+    
+    // Aplicar el estilo del mapa de forma segura
+    try {
+      controller.setMapStyle(_mapStyle);
+    } catch (e) {
+      debugPrint('⚠️ Error al aplicar estilo del mapa: $e');
+    }
+    
+    // Centrar automáticamente en la ubicación al crear el mapa
     if (_currentPosition != null) {
       // Usar un delay para evitar conflictos con ImageReader
-      Future.delayed(const Duration(milliseconds: 100), () {
-        _goToMyLocation();
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (_mapController != null && mounted) {
+          _goToMyLocation();
+        }
+      });
+    } else {
+      // Si no hay ubicación, usar ubicación por defecto
+      setState(() {
+        _currentPosition = _defaultLocation;
+        _isLoading = false;
+      });
+      
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (_mapController != null && mounted) {
+          _goToMyLocation();
+        }
       });
     }
   }
 
   void _goToMyLocation() async {
-    if (_mapController != null && _currentPosition != null) {
+    if (_mapController != null && _currentPosition != null && mounted) {
       try {
         // Centrar el mapa en la ubicación actual con animación
         await _mapController!.animateCamera(
@@ -168,46 +169,150 @@ class _MapPreviewState extends State<MapPreview> {
         );
         
         // Feedback háptico para confirmar la acción
-        HapticFeedback.lightImpact();
+        if (mounted) {
+          HapticFeedback.lightImpact();
+        }
         
         debugPrint('📍 Mapa centrado en ubicación actual: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}');
       } catch (e) {
         debugPrint('❌ Error al centrar el mapa: $e');
       }
     } else {
-      debugPrint('⚠️ No se puede centrar el mapa: controlador o ubicación no disponibles');
+      debugPrint('⚠️ No se puede centrar el mapa: controlador, ubicación no disponibles o widget no montado');
     }
   }
 
-  // Función para crear círculos de zonas de peligro
-  Set<Circle> _createHotspotCircles() {
-    // Círculo del Puente de Hierro
-    final Circle puenteZone = Circle(
-      circleId: const CircleId('puente_hierro_zone'),
-      center: const LatLng(40.9458, -4.1158), // Puente de Hierro
-      radius: 700, // 700 metros
-      fillColor: const Color(0x4DFF5B5B), // Rojo Coral con 30% opacidad
-      strokeColor: const Color(0xFFFF5B5B), // Rojo Coral sólido
-      strokeWidth: 3,
+  /// Crea los círculos de hotspots en el mapa de vista previa
+  void _createHotspotCircles() {
+    final List<Circle> hotspotCircles = [];
+    
+    for (final hotspot in _geofenceService.hotspotsList) {
+      // Determinar el color según la actividad
+      final Color circleColor = hotspot.activity == 'ALTA' 
+          ? const Color(0xFFFF2100) // Rojo para ALTA
+          : const Color(0xFFFFC700); // Amarillo para MODERADA
+      
+      // Crear el círculo
+      final Circle circle = Circle(
+        circleId: CircleId('preview_${hotspot.id}'),
+        center: LatLng(hotspot.latitude, hotspot.longitude),
+        radius: hotspot.radius,
+        fillColor: circleColor.withValues(alpha: 0.2), // Color de relleno semi-transparente
+        strokeColor: circleColor, // Color del borde
+        strokeWidth: 2, // Borde más delgado para la vista previa
+        consumeTapEvents: true,
+        onTap: () => _showHotspotInfo(hotspot),
+      );
+      
+      hotspotCircles.add(circle);
+    }
+    
+    setState(() {
+      _circles.clear();
+      _circles.addAll(hotspotCircles);
+    });
+  }
+
+  /// Muestra información del hotspot cuando se toca en la vista previa
+  void _showHotspotInfo(GeofenceHotspot hotspot) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                Icons.warning,
+                color: hotspot.activity == 'ALTA' 
+                    ? const Color(0xFFFF2100) 
+                    : const Color(0xFFFFC700),
+              ),
+              const SizedBox(width: 8),
+              const Text('Zona de Hotspot'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _getHotspotDisplayName(hotspot.id),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text('Nivel de Actividad: ${hotspot.activity}'),
+              Text('Radio: ${hotspot.radius.toStringAsFixed(0)} metros'),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: hotspot.activity == 'ALTA' 
+                      ? const Color(0xFFFF2100).withValues(alpha: 0.1)
+                      : const Color(0xFFFFC700).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: hotspot.activity == 'ALTA' 
+                        ? const Color(0xFFFF2100)
+                        : const Color(0xFFFFC700),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  hotspot.activity == 'ALTA' 
+                      ? '⚠️ Zona de alta actividad - Ten precaución'
+                      : '⚠️ Zona de actividad moderada - Mantente alerta',
+                  style: TextStyle(
+                    color: hotspot.activity == 'ALTA' 
+                        ? const Color(0xFFFF2100)
+                        : const Color(0xFFFFC700),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        );
+      },
     );
-    
-    debugPrint('🚨 Zona de peligro Puente de Hierro creada: 40.9458, -4.1158');
-    debugPrint('📍 Radio Puente de Hierro: 700 metros');
-    debugPrint('🎨 Color: Rojo Coral (#FF5B5B) con 30% opacidad');
-    
-    return {puenteZone};
+  }
+
+  /// Obtiene el nombre de visualización del hotspot
+  String _getHotspotDisplayName(String id) {
+    switch (id) {
+      case 'guardia_civil':
+        return 'Edificio Guardia Civil';
+      case 'hermanitas_pobres':
+        return 'Hermanitas de los Pobres';
+      case 'claret':
+        return 'Claret';
+      case 'camino_ie':
+        return 'Camino IE';
+      default:
+        return id;
+    }
   }
 
   // Método para hacer zoom in
   void _zoomIn() async {
-    if (_mapController != null) {
+    if (_mapController != null && mounted) {
       try {
         _currentZoom = (_currentZoom + 1).clamp(1.0, 20.0);
         await _mapController!.animateCamera(
           CameraUpdate.zoomTo(_currentZoom),
         );
         
-        HapticFeedback.lightImpact();
+        if (mounted) {
+          HapticFeedback.lightImpact();
+        }
         debugPrint('🔍 Zoom in: ${_currentZoom.toStringAsFixed(1)}');
       } catch (e) {
         debugPrint('❌ Error al hacer zoom in: $e');
@@ -217,14 +322,16 @@ class _MapPreviewState extends State<MapPreview> {
 
   // Método para hacer zoom out
   void _zoomOut() async {
-    if (_mapController != null) {
+    if (_mapController != null && mounted) {
       try {
         _currentZoom = (_currentZoom - 1).clamp(1.0, 20.0);
         await _mapController!.animateCamera(
           CameraUpdate.zoomTo(_currentZoom),
         );
         
-        HapticFeedback.lightImpact();
+        if (mounted) {
+          HapticFeedback.lightImpact();
+        }
         debugPrint('🔍 Zoom out: ${_currentZoom.toStringAsFixed(1)}');
       } catch (e) {
         debugPrint('❌ Error al hacer zoom out: $e');
@@ -285,10 +392,10 @@ class _MapPreviewState extends State<MapPreview> {
                   ],
                 ),
               )
-            else if (_currentPosition != null)
+            else
               GoogleMap(
                 initialCameraPosition: CameraPosition(
-                  target: _currentPosition!,
+                  target: _currentPosition ?? _defaultLocation,
                   zoom: 14.0,
                 ),
                 onMapCreated: _onMapCreated,
@@ -302,10 +409,9 @@ class _MapPreviewState extends State<MapPreview> {
                 compassEnabled: true,
                 buildingsEnabled: false,
                 trafficEnabled: false,
-                style: _mapStyle,
               ),
             // Botones de control del mapa (centrados horizontalmente en el lado derecho)
-            if (_currentPosition != null)
+            if (!_isLoading && _errorMessage.isEmpty)
               Positioned(
                 top: 16,
                 right: 16,
@@ -400,6 +506,9 @@ class _MapPreviewState extends State<MapPreview> {
     // Limpiar recursos del mapa para evitar warnings de ImageReader
     _mapController?.dispose();
     _mapController = null;
+    // Limpiar círculos para liberar recursos
+    _circles.clear();
+    _markers.clear();
     super.dispose();
   }
 }
