@@ -1,8 +1,10 @@
 package com.holdon.holdon
 
 import android.app.*
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -10,6 +12,7 @@ import android.hardware.SensorManager
 import android.media.AudioManager
 import android.os.Binder
 import android.os.Build
+import android.os.CountDownTimer
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
@@ -28,11 +31,20 @@ class AntiTheftService : Service(), SensorEventListener {
     private var accelerationThreshold = 50.0
     private var gyroscopeThreshold = 9.0
     
+    // Protocolo de Bolsillo
+    private var isPocketProtocolActive = false
+    private var pocketTimer: CountDownTimer? = null
+    private val POCKET_LUX_THRESHOLD = 1.0f
+    
     private var sensorManager: SensorManager? = null
     private var accelerometer: Sensor? = null
     private var gyroscope: Sensor? = null
+    private var lightSensor: Sensor? = null
     private var powerManager: PowerManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    
+    // BroadcastReceiver para detectar desbloqueo del dispositivo
+    private var userPresentReceiver: BroadcastReceiver? = null
     
     private var eventSink: EventChannel.EventSink? = null
     private var showSensorValues = true
@@ -42,6 +54,7 @@ class AntiTheftService : Service(), SensorEventListener {
     private var isAlarmActive = false
     private var accelerometerEventCount = 0
     private var gyroscopeEventCount = 0
+    private var lightSensorEventCount = 0
     
     
     // Binder para comunicación con la actividad
@@ -94,6 +107,21 @@ class AntiTheftService : Service(), SensorEventListener {
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
         gyroscope = sensorManager?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        lightSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LIGHT)
+        
+        // Inicializar BroadcastReceiver para detectar desbloqueo
+        userPresentReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == Intent.ACTION_USER_PRESENT) {
+                    Log.d(TAG, "Usuario desbloqueó el dispositivo - Cancelando temporizador de bolsillo")
+                    cancelPocketTimer()
+                }
+            }
+        }
+        
+        // Registrar el BroadcastReceiver
+        val filter = IntentFilter(Intent.ACTION_USER_PRESENT)
+        registerReceiver(userPresentReceiver, filter)
         
         // Inicializar PowerManager para mantener el dispositivo despierto
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -137,6 +165,19 @@ class AntiTheftService : Service(), SensorEventListener {
         Log.d(TAG, "AntiTheftService onDestroy")
         
         stopDetection()
+        
+        // Cancelar temporizador de bolsillo si está activo
+        cancelPocketTimer()
+        
+        // Desregistrar BroadcastReceiver
+        try {
+            userPresentReceiver?.let { receiver ->
+                unregisterReceiver(receiver)
+                Log.d(TAG, "BroadcastReceiver desregistrado correctamente")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error al desregistrar BroadcastReceiver: ${e.message}")
+        }
         
         // Liberar wake lock de manera segura
         try {
@@ -192,13 +233,21 @@ class AntiTheftService : Service(), SensorEventListener {
     private fun startDetection() {
         if (isActive) {
             Log.d(TAG, "Detección ya está activa - Reiniciando sensores")
-            // Desregistrar listeners existentes para evitar duplicados
-            sensorManager?.unregisterListener(this)
+            // Desregistrar solo acelerómetro y giroscopio para evitar duplicados
+            // El sensor de luz DEBE mantenerse activo
+            accelerometer?.let { sensor ->
+                sensorManager?.unregisterListener(this, sensor)
+            }
+            gyroscope?.let { sensor ->
+                sensorManager?.unregisterListener(this, sensor)
+            }
+            Log.d(TAG, "💡 Sensor de Luz MANTENIDO durante reinicio")
         }
         
         isActive = true
         accelerometerEventCount = 0
         gyroscopeEventCount = 0
+        lightSensorEventCount = 0
         
         Log.d(TAG, "Iniciando detección - Estado: isActive=$isActive")
         
@@ -217,7 +266,18 @@ class AntiTheftService : Service(), SensorEventListener {
         // Verificar que los sensores estén disponibles
         val hasAccelerometer = accelerometer != null
         val hasGyroscope = gyroscope != null
-        Log.d(TAG, "Sensores disponibles - Acelerómetro: $hasAccelerometer, Giroscopio: $hasGyroscope")
+        val hasLightSensor = lightSensor != null
+        Log.d(TAG, "🔍 Verificando sensores disponibles:")
+        Log.d(TAG, "🔍 - Acelerómetro: $hasAccelerometer")
+        Log.d(TAG, "🔍 - Giroscopio: $hasGyroscope")
+        Log.d(TAG, "🔍 - Sensor de Luz: $hasLightSensor")
+        
+        if (hasLightSensor) {
+            Log.d(TAG, "💡 Sensor de Luz detectado y disponible para el Protocolo de Bolsillo")
+            Log.d(TAG, "💡 Umbral de luminosidad configurado: ${POCKET_LUX_THRESHOLD} lux")
+        } else {
+            Log.w(TAG, "⚠️ Sensor de Luz NO disponible - Protocolo de Bolsillo deshabilitado")
+        }
         
         // Registrar listeners de sensores
         if (hasAccelerometer) {
@@ -238,6 +298,21 @@ class AntiTheftService : Service(), SensorEventListener {
             Log.e(TAG, "Giroscopio no disponible")
         }
         
+        if (hasLightSensor) {
+            lightSensor?.let { sensor ->
+                val success = sensorManager?.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI) ?: false
+                Log.d(TAG, "💡 Sensor de Luz registrado: $success")
+                Log.d(TAG, "💡 Sensor de Luz - Nombre: ${sensor.name}, Vendor: ${sensor.vendor}, Max Range: ${sensor.maximumRange}")
+                if (success) {
+                    Log.d(TAG, "💡 Sensor de Luz LISTO para Protocolo de Bolsillo continuo")
+                } else {
+                    Log.e(TAG, "❌ Error al registrar Sensor de Luz - Protocolo de Bolsillo deshabilitado")
+                }
+            }
+        } else {
+            Log.e(TAG, "❌ Sensor de Luz no disponible en este dispositivo")
+        }
+        
         Log.d(TAG, "Detección iniciada completamente")
         ServiceEventManager.sendEvent(mapOf(
             "type" to "service_started",
@@ -253,6 +328,7 @@ class AntiTheftService : Service(), SensorEventListener {
             // Verificar que los sensores estén registrados y funcionando
             val hasAccelerometer = accelerometer != null
             val hasGyroscope = gyroscope != null
+            val hasLightSensor = lightSensor != null
             
             if (hasAccelerometer && hasGyroscope) {
                 Log.d(TAG, "Sensores verificados - Detección activa")
@@ -268,6 +344,11 @@ class AntiTheftService : Service(), SensorEventListener {
                     gyroscope?.let { sensor ->
                         sensorManager?.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
                         Log.d(TAG, "Giroscopio re-registrado")
+                    }
+                    
+                    lightSensor?.let { sensor ->
+                        sensorManager?.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+                        Log.d(TAG, "Sensor de Luz re-registrado")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error al re-registrar sensores: ${e.message}")
@@ -292,6 +373,7 @@ class AntiTheftService : Service(), SensorEventListener {
         // Verificar que los sensores estén disponibles
         val hasAccelerometer = accelerometer != null
         val hasGyroscope = gyroscope != null
+        val hasLightSensor = lightSensor != null
         
         if (!hasAccelerometer || !hasGyroscope) {
             Log.e(TAG, "Sensores no disponibles - Acelerómetro: $hasAccelerometer, Giroscopio: $hasGyroscope")
@@ -299,9 +381,16 @@ class AntiTheftService : Service(), SensorEventListener {
         }
         
         try {
-            // Desregistrar listeners existentes para evitar duplicados
-            sensorManager?.unregisterListener(this)
-            Log.d(TAG, "Listeners existentes desregistrados")
+            // Desregistrar solo acelerómetro y giroscopio para evitar duplicados
+            // El sensor de luz DEBE mantenerse activo
+            accelerometer?.let { sensor ->
+                sensorManager?.unregisterListener(this, sensor)
+            }
+            gyroscope?.let { sensor ->
+                sensorManager?.unregisterListener(this, sensor)
+            }
+            Log.d(TAG, "Acelerómetro y Giroscopio desregistrados")
+            Log.d(TAG, "💡 Sensor de Luz MANTENIDO durante reactivación")
             
             // Registrar nuevamente los listeners de sensores
             accelerometer?.let { sensor ->
@@ -312,6 +401,11 @@ class AntiTheftService : Service(), SensorEventListener {
             gyroscope?.let { sensor ->
                 sensorManager?.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
                 Log.d(TAG, "Listener de giroscopio reactivado")
+            }
+            
+            lightSensor?.let { sensor ->
+                sensorManager?.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
+                Log.d(TAG, "Listener de sensor de luz reactivado")
             }
             
             Log.d(TAG, "Listeners de sensores reactivados exitosamente")
@@ -329,13 +423,25 @@ class AntiTheftService : Service(), SensorEventListener {
         isActive = false
         isAlarmActive = false
         
-        // Desregistrar listeners de sensores
-        sensorManager?.unregisterListener(this)
+        // CRÍTICO: Solo desregistrar acelerómetro y giroscopio
+        // El sensor de luz DEBE permanecer activo para el Protocolo de Bolsillo
+        accelerometer?.let { sensor ->
+            sensorManager?.unregisterListener(this, sensor)
+            Log.d(TAG, "Acelerómetro desregistrado")
+        }
+        
+        gyroscope?.let { sensor ->
+            sensorManager?.unregisterListener(this, sensor)
+            Log.d(TAG, "Giroscopio desregistrado")
+        }
+        
+        // NO desregistrar el sensor de luz - debe permanecer activo
+        Log.d(TAG, "💡 Sensor de Luz MANTENIDO ACTIVO para Protocolo de Bolsillo")
         
         // NO liberar wake lock aquí - se liberará en onDestroy()
         // wakeLock?.release()
         
-        Log.d(TAG, "Detección detenida")
+        Log.d(TAG, "Detección de movimiento detenida - Protocolo de Bolsillo permanece activo")
         ServiceEventManager.sendEvent(mapOf(
             "type" to "service_stopped",
             "message" to "Servicio de detección detenido"
@@ -345,7 +451,14 @@ class AntiTheftService : Service(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null) return
         
-        // Verificar que la detección esté activa
+        // CRÍTICO: El sensor de luz debe funcionar INDEPENDIENTEMENTE del estado isActive
+        if (event.sensor.type == Sensor.TYPE_LIGHT) {
+            // El sensor de luz siempre debe procesarse para el Protocolo de Bolsillo
+            handleLightSensorEvent(event)
+            return
+        }
+        
+        // Para otros sensores (acelerómetro y giroscopio), verificar que la detección esté activa
         if (!isActive) {
             Log.w(TAG, "Evento de sensor recibido pero detección no activa - Reactivando")
             ensureDetectionActive()
@@ -362,6 +475,15 @@ class AntiTheftService : Service(), SensorEventListener {
             gyroscopeEventCount++
             if (gyroscopeEventCount % 50 == 0) { // Log cada 50 eventos para no saturar
                 Log.d(TAG, "Giroscopio funcionando - Evento #$gyroscopeEventCount")
+            }
+        } else if (event.sensor.type == Sensor.TYPE_LIGHT) {
+            lightSensorEventCount++
+            if (lightSensorEventCount % 50 == 0) { // Log cada 50 eventos para no saturar
+                Log.d(TAG, "💡 Sensor de Luz funcionando - Evento #$lightSensorEventCount")
+            }
+            // Log especial para los primeros 5 eventos
+            if (lightSensorEventCount <= 5) {
+                Log.d(TAG, "💡 [PRIMEROS EVENTOS] Sensor de Luz - Evento #$lightSensorEventCount, Lux: ${event.values[0]}")
             }
         }
         
@@ -409,11 +531,44 @@ class AntiTheftService : Service(), SensorEventListener {
                     checkForTheftDetection("gyroscope", magnitude)
                 }
             }
+            
         }
     }
     
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         // No necesario para esta implementación
+    }
+    
+    /**
+     * Maneja eventos del sensor de luz de forma INDEPENDIENTE del estado del servicio
+     * CRÍTICO: Esta función debe ejecutarse continuamente para el Protocolo de Bolsillo
+     */
+    private fun handleLightSensorEvent(event: SensorEvent) {
+        val lightValue = event.values[0]
+        
+        // Log detallado del sensor de luz cada 5 eventos para mejor visibilidad
+        if (lightSensorEventCount % 5 == 0) {
+            Log.d(TAG, "💡 Sensor de Luz - Lux: ${lightValue}, Protocolo Activo: $isPocketProtocolActive, Evento #$lightSensorEventCount")
+        }
+        
+        // Log cada evento para los primeros 20 eventos para verificar funcionamiento
+        if (lightSensorEventCount <= 20) {
+            Log.d(TAG, "💡 [INICIO] Sensor de Luz - Lux: ${lightValue}, Evento #$lightSensorEventCount")
+        }
+        
+        // Enviar datos de sensor si está habilitado
+        if (showSensorValues) {
+            ServiceEventManager.sendEvent(mapOf(
+                "type" to "sensor_data",
+                "sensorType" to "light",
+                "lux" to lightValue,
+                "isPocketProtocolActive" to isPocketProtocolActive,
+                "eventCount" to lightSensorEventCount
+            ))
+        }
+        
+        // Lógica del Protocolo de Bolsillo - SIEMPRE se ejecuta
+        handlePocketProtocol(lightValue)
     }
     
     private fun calculateMagnitude(x: Float, y: Float, z: Float): Double {
@@ -461,6 +616,7 @@ class AntiTheftService : Service(), SensorEventListener {
         // Resetear contadores
         accelerometerEventCount = 0
         gyroscopeEventCount = 0
+        lightSensorEventCount = 0
         
         // Reiniciar completamente la detección para asegurar que funcione
         stopDetection()
@@ -490,9 +646,13 @@ class AntiTheftService : Service(), SensorEventListener {
             "isAlarmActive" to isAlarmActive,
             "accelerometerAvailable" to (accelerometer != null),
             "gyroscopeAvailable" to (gyroscope != null),
+            "lightSensorAvailable" to (lightSensor != null),
             "accelerometerEventCount" to accelerometerEventCount,
             "gyroscopeEventCount" to gyroscopeEventCount,
-            "wakeLockHeld" to (wakeLock?.isHeld ?: false)
+            "lightSensorEventCount" to lightSensorEventCount,
+            "wakeLockHeld" to (wakeLock?.isHeld ?: false),
+            "isPocketProtocolActive" to isPocketProtocolActive,
+            "pocketTimerActive" to (pocketTimer != null)
         )
     }
     
@@ -525,6 +685,123 @@ class AntiTheftService : Service(), SensorEventListener {
             Log.d(TAG, "Volumen establecido al máximo para $successCount streams")
         } catch (e: Exception) {
             Log.e(TAG, "Error al establecer volumen máximo: ${e.message}")
+        }
+    }
+    
+    /**
+     * Maneja la lógica del Protocolo de Bolsillo basado en el sensor de luz
+     * IMPORTANTE: Esta función se ejecuta continuamente y debe permitir reactivación indefinida
+     */
+    private fun handlePocketProtocol(lightValue: Float) {
+        when {
+            // ACTIVACIÓN DEL PROTOCOLO: Móvil metido en el bolsillo (oscuridad)
+            lightValue < POCKET_LUX_THRESHOLD -> {
+                if (!isPocketProtocolActive) {
+                    // Cancelar cualquier temporizador activo antes de activar
+                    cancelPocketTimer()
+                    
+                    isPocketProtocolActive = true
+                    Log.d(TAG, "📱 PROTOCOLO DE BOLSILLO ACTIVADO - Luz: ${lightValue} lux (umbral: ${POCKET_LUX_THRESHOLD} lux)")
+                    Log.d(TAG, "📱 Estado: Móvil detectado en bolsillo - Protocolo ARMADO y listo")
+                    
+                    ServiceEventManager.sendEvent(mapOf(
+                        "type" to "pocket_protocol_activated",
+                        "message" to "Protocolo de bolsillo activado",
+                        "lightValue" to lightValue
+                    ))
+                } else {
+                    // Protocolo ya activo - mantener estado y log ocasional
+                    if (lightSensorEventCount % 30 == 0) {
+                        Log.d(TAG, "📱 Protocolo MANTENIDO ACTIVO - Móvil en bolsillo: ${lightValue} lux")
+                    }
+                }
+            }
+            
+            // EVENTO DESENCADENANTE: Móvil sacado del bolsillo (luz)
+            lightValue >= POCKET_LUX_THRESHOLD -> {
+                if (isPocketProtocolActive) {
+                    // CRÍTICO: Desarmar inmediatamente el protocolo
+                    isPocketProtocolActive = false
+                    
+                    Log.d(TAG, "🚨 EVENTO DESENCADENANTE DETECTADO!")
+                    Log.d(TAG, "🚨 Móvil sacado del bolsillo - Luz: ${lightValue} lux (umbral: ${POCKET_LUX_THRESHOLD} lux)")
+                    Log.d(TAG, "🚨 Protocolo DESARMADO - Iniciando período de gracia de 5 segundos...")
+                    
+                    // Iniciar temporizador de 5 segundos
+                    startPocketTimer()
+                    
+                    ServiceEventManager.sendEvent(mapOf(
+                        "type" to "pocket_protocol_triggered",
+                        "message" to "Móvil sacado del bolsillo - Iniciando período de gracia",
+                        "lightValue" to lightValue
+                    ))
+                } else {
+                    // Protocolo no activo - log ocasional del estado normal
+                    if (lightSensorEventCount % 30 == 0) {
+                        Log.d(TAG, "💡 Protocolo INACTIVO - Móvil fuera del bolsillo: ${lightValue} lux (normal)")
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Inicia el temporizador de 5 segundos para el Protocolo de Bolsillo
+     */
+    private fun startPocketTimer() {
+        // Cancelar temporizador existente si hay uno
+        cancelPocketTimer()
+        
+        Log.d(TAG, "⏰ Iniciando temporizador de 5 segundos para Protocolo de Bolsillo")
+        
+        pocketTimer = object : CountDownTimer(5000, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                val secondsRemaining = (millisUntilFinished / 1000).toInt()
+                Log.d(TAG, "⏰ Temporizador de bolsillo: ${secondsRemaining} segundos restantes")
+                
+                ServiceEventManager.sendEvent(mapOf(
+                    "type" to "pocket_timer_tick",
+                    "secondsRemaining" to secondsRemaining,
+                    "message" to "Período de gracia: ${secondsRemaining} segundos")
+                )
+            }
+            
+            override fun onFinish() {
+                Log.d(TAG, "🚨 TEMPORIZADOR FINALIZADO - Disparando alarma por Protocolo de Bolsillo")
+                
+                ServiceEventManager.sendEvent(mapOf(
+                    "type" to "pocket_timer_finished",
+                    "message" to "Período de gracia finalizado - Alarma activada")
+                )
+                
+                // Disparar la alarma principal
+                triggerAlarm()
+                
+                pocketTimer = null
+            }
+        }
+        
+        pocketTimer?.start()
+        
+        ServiceEventManager.sendEvent(mapOf(
+            "type" to "pocket_timer_started",
+            "message" to "Período de gracia iniciado - 5 segundos")
+        )
+    }
+    
+    /**
+     * Cancela el temporizador del Protocolo de Bolsillo
+     */
+    private fun cancelPocketTimer() {
+        pocketTimer?.let { timer ->
+            timer.cancel()
+            pocketTimer = null
+            Log.d(TAG, "✅ Temporizador de bolsillo cancelado por desbloqueo del dispositivo")
+            
+            ServiceEventManager.sendEvent(mapOf(
+                "type" to "pocket_timer_cancelled",
+                "message" to "Temporizador cancelado - Usuario desbloqueó el dispositivo")
+            )
         }
     }
 }
