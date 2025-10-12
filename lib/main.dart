@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/security_screen.dart';
 import 'screens/map_screen.dart';
-import 'services/geofence_service.dart';
+import 'services/optimized_geofence_service.dart';
 import 'background/geofence_background_task.dart';
 
 void main() {
@@ -38,7 +38,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  final GeofenceService _geofenceService = GeofenceService();
+  final OptimizedGeofenceService _optimizedGeofenceService = OptimizedGeofenceService();
 
   final List<Widget> _screens = [
     const SecurityScreen(),
@@ -48,22 +48,33 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeGeofenceService();
+    _initializeOptimizedGeofenceService();
   }
 
-  /// Inicializa el servicio de geofencing (SIN activar monitoreo automático)
-  Future<void> _initializeGeofenceService() async {
+  /// Inicializa el servicio de geofencing optimizado
+  Future<void> _initializeOptimizedGeofenceService() async {
     try {
-      // Solo inicializar el servicio, NO iniciar el monitoreo automáticamente
-      final success = await _geofenceService.initialize();
+      debugPrint('🚀 Inicializando servicio de geofencing optimizado...');
+      
+      // Inicializar el servicio optimizado
+      final success = await _optimizedGeofenceService.initialize();
       
       if (success) {
-        debugPrint('✅ Servicio de geofencing inicializado (sin activar monitoreo)');
+        debugPrint('✅ Servicio de geofencing optimizado inicializado correctamente');
+        
+        // Iniciar monitoreo automáticamente
+        final monitoringStarted = await _optimizedGeofenceService.startMonitoring();
+        
+        if (monitoringStarted) {
+          debugPrint('🎯 Monitoreo de geofencing optimizado iniciado');
+        } else {
+          debugPrint('⚠️ Error al iniciar monitoreo de geofencing');
+        }
       } else {
-        debugPrint('❌ Error al inicializar servicio de geofencing');
+        debugPrint('❌ Error al inicializar servicio de geofencing optimizado');
       }
     } catch (e) {
-      debugPrint('❌ Excepción al inicializar geofencing: $e');
+      debugPrint('❌ Excepción al inicializar geofencing optimizado: $e');
     }
   }
 

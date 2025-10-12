@@ -30,16 +30,6 @@ class GeofenceService {
       color: '#ff2100',
     ),
     
-    // Hermanitas de los pobres (MODERADA)
-    GeofenceHotspot(
-      id: 'hermanitas_pobres',
-      latitude: 40.94204,
-      longitude: -4.10901,
-      radius: 148.69,
-      activity: 'MODERADA',
-      color: '#ffc700',
-    ),
-    
     // Claret (ALTA)
     GeofenceHotspot(
       id: 'claret',
@@ -48,6 +38,16 @@ class GeofenceService {
       radius: 116.55,
       activity: 'ALTA',
       color: '#ff2100',
+    ),
+    
+    // Hermanitas de los pobres (MODERADA)
+    GeofenceHotspot(
+      id: 'hermanitas_pobres',
+      latitude: 40.94204,
+      longitude: -4.10901,
+      radius: 148.69,
+      activity: 'MODERADA',
+      color: '#ffc700',
     ),
     
     // Camino IE (MODERADA)
@@ -108,14 +108,68 @@ class GeofenceService {
 
   /// Solicita los permisos necesarios
   Future<void> _requestPermissions() async {
-    // Solicitar permisos de ubicación
-    await Permission.locationWhenInUse.request();
-    await Permission.locationAlways.request();
+    try {
+      debugPrint('🔐 Solicitando permisos de ubicación...');
+      
+      // Solicitar permiso de ubicación cuando la app está en uso primero
+      var locationWhenInUse = await Permission.locationWhenInUse.request();
+      debugPrint('📍 Permiso locationWhenInUse: $locationWhenInUse');
+      
+      if (locationWhenInUse.isGranted) {
+        // Solo solicitar ubicación en segundo plano si el permiso básico está otorgado
+        var locationAlways = await Permission.locationAlways.request();
+        debugPrint('📍 Permiso locationAlways: $locationAlways');
+        
+        if (locationAlways.isDenied || locationAlways.isPermanentlyDenied) {
+          debugPrint('⚠️ Permiso de ubicación en segundo plano no otorgado');
+          debugPrint('⚠️ El geofencing puede no funcionar con la app cerrada');
+        }
+      }
+      
+      // Solicitar permisos de notificaciones
+      var notification = await Permission.notification.request();
+      debugPrint('🔔 Permiso notification: $notification');
+      
+      // Verificar permisos críticos
+      final locationAlwaysStatus = await Permission.locationAlways.status;
+      final notificationStatus = await Permission.notification.status;
+      
+      debugPrint('🔍 Estado final de permisos:');
+      debugPrint('   - Ubicación siempre: $locationAlwaysStatus');
+      debugPrint('   - Notificaciones: $notificationStatus');
+      
+      if (locationAlwaysStatus.isGranted && notificationStatus.isGranted) {
+        debugPrint('✅ Todos los permisos críticos otorgados');
+      } else {
+        debugPrint('⚠️ Algunos permisos críticos no están otorgados');
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Error al solicitar permisos: $e');
+    }
+  }
+
+  /// Verifica que los permisos críticos estén otorgados
+  Future<bool> _checkRequiredPermissions() async {
+    final locationAlwaysStatus = await Permission.locationAlways.status;
+    final notificationStatus = await Permission.notification.status;
     
-    // Solicitar permisos de notificaciones
-    await Permission.notification.request();
+    debugPrint('🔍 Verificando permisos críticos:');
+    debugPrint('   - Ubicación siempre: $locationAlwaysStatus');
+    debugPrint('   - Notificaciones: $notificationStatus');
     
-    debugPrint('🔐 Permisos solicitados');
+    if (!locationAlwaysStatus.isGranted) {
+      debugPrint('❌ Permiso de ubicación en segundo plano no otorgado');
+      return false;
+    }
+    
+    if (!notificationStatus.isGranted) {
+      debugPrint('❌ Permiso de notificaciones no otorgado');
+      return false;
+    }
+    
+    debugPrint('✅ Todos los permisos críticos están otorgados');
+    return true;
   }
 
   /// Inicia el monitoreo de los hotspots
@@ -128,6 +182,12 @@ class GeofenceService {
     if (_isMonitoring) {
       debugPrint('⚠️ Monitoreo ya está activo');
       return true;
+    }
+
+    // Verificar permisos antes de iniciar
+    if (!await _checkRequiredPermissions()) {
+      debugPrint('❌ No se pueden iniciar servicios sin permisos críticos');
+      return false;
     }
 
     try {
@@ -199,29 +259,37 @@ class GeofenceService {
         orElse: () => throw Exception('Hotspot no encontrado: ${region.id}'),
       );
       
-      // Disparar notificación de alerta
-      showDangerZoneNotification(hotspot);
+      // Disparar notificación específica según el nivel de riesgo
+      if (hotspot.activity == 'ALTA') {
+        await _showHighDangerZoneNotification(hotspot);
+      } else if (hotspot.activity == 'MODERADA') {
+        await _showModerateDangerZoneNotification(hotspot);
+      }
     }
   }
 
-  /// Muestra la notificación de alerta cuando se entra a una zona peligrosa
-  static void showDangerZoneNotification(GeofenceHotspot hotspot) {
-    debugPrint('🚨 Mostrando notificación para hotspot: ${hotspot.id} (${hotspot.activity})');
+  /// Muestra la notificación para zonas de ALTA peligrosidad
+  static Future<void> _showHighDangerZoneNotification(GeofenceHotspot hotspot) async {
+    debugPrint('🔴 Mostrando notificación ALTA para hotspot: ${hotspot.id}');
     
     final GeofenceService instance = GeofenceService();
-    instance._localNotifications.show(
+    await instance._localNotifications.show(
       hotspot.id.hashCode, // ID único para cada hotspot
-      '🚨 ¡Alerta de Zona Peligrosa!',
-      'Estás en una zona de Hotspots. Desliza para activar el sistema de seguridad ahora.',
+      'Alerta, estás en una zona de alta peligrosidad.',
+      'Activa el sistema para estar a salvo.',
       const NotificationDetails(
         android: AndroidNotificationDetails(
-          'hotspot_alerts',
-          'Alertas de Hotspots',
-          channelDescription: 'Notificaciones de alerta cuando entras a zonas peligrosas',
-          importance: Importance.high,
-          priority: Priority.high,
+          'high_danger_alerts',
+          'Alertas de Alta Peligrosidad',
+          channelDescription: 'Notificaciones de alerta para zonas de alta peligrosidad',
+          importance: Importance.max,
+          priority: Priority.max,
+          category: AndroidNotificationCategory.alarm,
+          fullScreenIntent: true,
+          ongoing: true,
+          autoCancel: false,
           icon: '@mipmap/ic_launcher',
-          color: Color(0xFFFF2100), // Color rojo para alertas
+          color: Color(0xFFFF2100), // Color rojo
           playSound: true,
           enableVibration: true,
           showWhen: true,
@@ -230,9 +298,46 @@ class GeofenceService {
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
+          interruptionLevel: InterruptionLevel.critical,
         ),
       ),
-      payload: 'hotspot_alert:${hotspot.id}:${hotspot.activity}',
+      payload: 'high_danger_alert:${hotspot.id}',
+    );
+  }
+
+  /// Muestra la notificación para zonas de MODERADA peligrosidad
+  static Future<void> _showModerateDangerZoneNotification(GeofenceHotspot hotspot) async {
+    debugPrint('🟡 Mostrando notificación MODERADA para hotspot: ${hotspot.id}');
+    
+    final GeofenceService instance = GeofenceService();
+    await instance._localNotifications.show(
+      hotspot.id.hashCode, // ID único para cada hotspot
+      'Alerta, zona de peligrosidad moderada.',
+      'Activa el sistema para estar a salvo.',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'moderate_danger_alerts',
+          'Alertas de Peligrosidad Moderada',
+          channelDescription: 'Notificaciones de alerta para zonas de peligrosidad moderada',
+          importance: Importance.high,
+          priority: Priority.high,
+          category: AndroidNotificationCategory.status,
+          ongoing: false,
+          autoCancel: true,
+          icon: '@mipmap/ic_launcher',
+          color: Color(0xFFFF8C00), // Color ámbar
+          playSound: true,
+          enableVibration: true,
+          showWhen: true,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          interruptionLevel: InterruptionLevel.timeSensitive,
+        ),
+      ),
+      payload: 'moderate_danger_alert:${hotspot.id}',
     );
   }
 
@@ -264,9 +369,17 @@ class GeofenceService {
   void _onNotificationTapped(NotificationResponse response) {
     debugPrint('📱 Notificación tocada: ${response.payload}');
     
-    if (response.payload != null && response.payload!.startsWith('hotspot_alert:')) {
-      // Aquí puedes agregar lógica adicional cuando se toca la notificación de alerta
-      debugPrint('🚨 Usuario tocó alerta de hotspot');
+    if (response.payload != null) {
+      if (response.payload!.startsWith('high_danger_alert:')) {
+        debugPrint('🔴 Usuario tocó alerta de alta peligrosidad');
+        // Aquí puedes agregar lógica adicional para alertas de alta peligrosidad
+      } else if (response.payload!.startsWith('moderate_danger_alert:')) {
+        debugPrint('🟡 Usuario tocó alerta de peligrosidad moderada');
+        // Aquí puedes agregar lógica adicional para alertas moderadas
+      } else if (response.payload!.startsWith('hotspot_alert:')) {
+        debugPrint('🚨 Usuario tocó alerta de hotspot (legacy)');
+        // Mantener compatibilidad con el formato anterior
+      }
     }
   }
 

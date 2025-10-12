@@ -5,7 +5,7 @@ import '../widgets/feature_control_card.dart';
 import '../widgets/map_preview.dart';
 import '../widgets/deactivated_system_widget.dart';
 import '../services/security_service.dart';
-import '../services/geofence_service.dart';
+import '../services/optimized_geofence_service.dart';
 import 'sensor_test_screen.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
@@ -24,8 +24,8 @@ class _SecurityScreenState extends State<SecurityScreen> {
   // Servicio de seguridad
   final SecurityService _securityService = SecurityService();
   
-  // Servicio de geofencing
-  final GeofenceService _geofenceService = GeofenceService();
+  // Servicio de geofencing optimizado
+  final OptimizedGeofenceService _optimizedGeofenceService = OptimizedGeofenceService();
   
   // Callback para activar animaciones del botón central
   VoidCallback? _onCentralButtonAnimation;
@@ -79,7 +79,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   /// Verifica si el usuario está dentro de algún hotspot y obtiene el nivel de actividad
   Future<void> _checkHotspotStatus() async {
     try {
-      final String? activity = await _geofenceService.getUserHotspotActivity();
+      final String? activity = await _optimizedGeofenceService.getUserHotspotActivity();
       if (mounted) {
         setState(() {
           _hotspotActivity = activity;
