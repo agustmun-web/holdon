@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:geofencing_api/geofencing_api.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
 
 class GeofenceService {
   static final GeofenceService _instance = GeofenceService._internal();
@@ -277,6 +278,49 @@ class GeofenceService {
 
   /// Verifica si el servicio está inicializado
   bool get isInitialized => _isInitialized;
+
+  /// Verifica si el usuario está dentro de algún hotspot y retorna el nivel de actividad
+  Future<String?> getUserHotspotActivity() async {
+    try {
+      // Obtener la ubicación actual del usuario
+      final Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 5),
+        ),
+      );
+
+      final double userLat = position.latitude;
+      final double userLng = position.longitude;
+
+      // Verificar si está dentro de algún hotspot
+      for (final hotspot in hotspots) {
+        final double distance = Geolocator.distanceBetween(
+          userLat,
+          userLng,
+          hotspot.latitude,
+          hotspot.longitude,
+        );
+
+        if (distance <= hotspot.radius) {
+          debugPrint('📍 Usuario dentro del hotspot: ${hotspot.id} (${hotspot.activity}) - distancia: ${distance.toStringAsFixed(1)}m');
+          return hotspot.activity; // Retornar ALTA o MODERADA
+        }
+      }
+
+      debugPrint('📍 Usuario fuera de todos los hotspots');
+      return null; // No está en ningún hotspot
+    } catch (e) {
+      debugPrint('❌ Error al verificar ubicación del usuario: $e');
+      return null; // En caso de error, asumir que está fuera
+    }
+  }
+
+  /// Verifica si el usuario está dentro de algún hotspot (método legacy para compatibilidad)
+  Future<bool> isUserInsideHotspot() async {
+    final String? activity = await getUserHotspotActivity();
+    return activity != null;
+  }
 }
 
 /// Modelo para representar un hotspot de geofencing

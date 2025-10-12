@@ -5,6 +5,7 @@ import '../widgets/feature_control_card.dart';
 import '../widgets/map_preview.dart';
 import '../widgets/deactivated_system_widget.dart';
 import '../services/security_service.dart';
+import '../services/geofence_service.dart';
 import 'sensor_test_screen.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
@@ -23,11 +24,17 @@ class _SecurityScreenState extends State<SecurityScreen> {
   // Servicio de seguridad
   final SecurityService _securityService = SecurityService();
   
+  // Servicio de geofencing
+  final GeofenceService _geofenceService = GeofenceService();
+  
   // Callback para activar animaciones del botón central
   VoidCallback? _onCentralButtonAnimation;
   
   // Estado de permisos de administrador
   bool _hasAdminPermissions = false;
+  
+  // Estado de hotspot
+  String? _hotspotActivity;
   
   // Variables para programación de reactivación
   TimeOfDay? _selectedTime;
@@ -38,6 +45,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   void initState() {
     super.initState();
     _checkAdminPermissions();
+    _checkHotspotStatus();
     // Activar el sistema de seguridad al inicializar la pantalla
     _securityService.activateSecurity(showSensorValues: true);
     // Establecer sensibilidad normal por defecto
@@ -49,6 +57,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
         setState(() {});
       }
     });
+    
+    // Timer para verificar estado de hotspot cada 30 segundos
+    Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _checkHotspotStatus();
+      }
+    });
   }
   
   /// Verifica si la aplicación tiene permisos de administrador
@@ -58,6 +73,49 @@ class _SecurityScreenState extends State<SecurityScreen> {
       setState(() {
         _hasAdminPermissions = hasPermissions;
       });
+    }
+  }
+
+  /// Verifica si el usuario está dentro de algún hotspot y obtiene el nivel de actividad
+  Future<void> _checkHotspotStatus() async {
+    try {
+      final String? activity = await _geofenceService.getUserHotspotActivity();
+      if (mounted) {
+        setState(() {
+          _hotspotActivity = activity;
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ Error al verificar estado de hotspot: $e');
+    }
+  }
+
+  /// Construye el ActivityCard según el estado del hotspot
+  Widget _buildActivityCard() {
+    if (_hotspotActivity == null) {
+      // Estado seguro - no está en ningún hotspot
+      return const ActivityCard(
+        statusText: 'Seguro',
+        statusColor: Color(0xFF34A853), // Verde
+        titleText: 'Zona segura',
+        subtitleText: 'Sin hotspots cercanos • Todo en orden',
+      );
+    } else if (_hotspotActivity == 'ALTA') {
+      // Estado de alta actividad - hotspot rojo
+      return const ActivityCard(
+        statusText: 'Alta',
+        statusColor: Color(0xFFFF2100), // Rojo
+        titleText: 'Zona de alta actividad',
+        subtitleText: 'Alerta, zona con alta peligrosidad',
+      );
+    } else {
+      // Estado de media actividad - hotspot ámbar (MODERADA)
+      return const ActivityCard(
+        statusText: 'Media',
+        statusColor: Color(0xFFFF8C00), // Ámbar
+        titleText: 'Zona de actividad moderada',
+        subtitleText: 'Precaución, zona con peligrosidad moderada',
+      );
     }
   }
 
@@ -144,7 +202,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   // Card de actividad reciente
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16),
-                    child: const ActivityCard(),
+                    child: _buildActivityCard(),
                   ),
                   
                   const SizedBox(height: 24),

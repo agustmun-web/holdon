@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/security_screen.dart';
 import 'screens/map_screen.dart';
-import 'screens/sensor_test_screen.dart';
 import 'services/geofence_service.dart';
 import 'background/geofence_background_task.dart';
 

@@ -1,7 +1,18 @@
 import 'package:flutter/material.dart';
 
 class ActivityCard extends StatelessWidget {
-  const ActivityCard({super.key});
+  final String statusText;
+  final Color statusColor;
+  final String titleText;
+  final String subtitleText;
+
+  const ActivityCard({
+    super.key,
+    this.statusText = 'Media',
+    this.statusColor = const Color(0xFFF7B500),
+    this.titleText = 'Zona con actividad reciente',
+    this.subtitleText = '2 hotspots a 1.2 km • Última alerta hace 30 min',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -36,12 +47,12 @@ class ActivityCard extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFFF7B500),
+                color: statusColor,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
-                'Media',
-                style: TextStyle(
+              child: Text(
+                statusText,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
@@ -59,19 +70,19 @@ class ActivityCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Zona con actividad reciente',
-                  style: TextStyle(
-                    color: Color(0xFF9BE7C8),
+                Text(
+                  titleText,
+                  style: const TextStyle(
+                    color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  '2 hotspots a 1.2 km • Última alerta hace 30 min',
-                  style: TextStyle(
-                    color: Color(0xFF9BE7C8),
+                Text(
+                  subtitleText,
+                  style: const TextStyle(
+                    color: Color(0xFFaebab5),
                     fontSize: 12,
                   ),
                 ),
