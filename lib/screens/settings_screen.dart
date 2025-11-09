@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../services/security_service.dart';
-import 'sensor_test_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -14,7 +13,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final SecurityService _securityService = SecurityService();
   bool _notificationsEnabled = true;
-  bool _vibrationEnabled = true;
   bool _darkModeEnabled = true;
   Locale? _selectedLocale;
   double _pocketTimerSeconds = 5;
@@ -62,16 +60,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
           _buildSwitchTile(
-            title: l10n.translate('settings.option.vibration'),
-            subtitle: l10n.translate('settings.option.vibration.subtitle'),
-            value: _vibrationEnabled,
-            onChanged: (value) {
-              setState(() {
-                _vibrationEnabled = value;
-              });
-            },
-          ),
-          _buildSwitchTile(
             title: l10n.translate('settings.option.darkmode'),
             subtitle: l10n.translate('settings.option.darkmode.subtitle'),
             value: _darkModeEnabled,
@@ -93,22 +81,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               appState.setLocale(locale);
             },
             l10n: l10n,
-          ),
-          const SizedBox(height: 24),
-          _buildSectionHeader(l10n.translate('settings.section.diagnostics')),
-          const SizedBox(height: 12),
-          _buildNavigationTile(
-            icon: Icons.science,
-            title: l10n.translate('settings.option.sensorTest'),
-            subtitle: l10n.translate('settings.option.sensorTest.subtitle'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SensorTestScreen(),
-                ),
-              );
-            },
           ),
         ],
       ),
