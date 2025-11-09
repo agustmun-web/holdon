@@ -164,7 +164,11 @@ class _CustomZonesScreenState extends State<CustomZonesScreen> {
         });
       }
       if (deleted) {
-        widget.zoneRevision.value = widget.zoneRevision.value + 1;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            widget.zoneRevision.value = widget.zoneRevision.value + 1;
+          }
+        });
       }
     }
   }

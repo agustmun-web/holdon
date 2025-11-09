@@ -380,8 +380,12 @@ class _MapScreenState extends State<MapScreen> {
       );
 
       final revision = widget.zoneRevision;
-      if (revision != null) {
-        revision.value = revision.value + 1;
+      if (revision != null && mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            revision.value = revision.value + 1;
+          }
+        });
       }
     } catch (e) {
       debugPrint('❌ Error al guardar zona personalizada: $e');
@@ -401,6 +405,7 @@ class _MapScreenState extends State<MapScreen> {
     final CustomZone? createdZone = await showModalBottomSheet<CustomZone>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (BuildContext modalContext) {
         return SafeArea(
           top: false,
@@ -414,105 +419,282 @@ class _MapScreenState extends State<MapScreen> {
             child: StatefulBuilder(
               builder: (BuildContext context, void Function(void Function()) setModalState) {
                 return SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Crear zona personalizada',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF101A1C).withValues(alpha: 0.98),
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 40,
+                          offset: const Offset(0, 24),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: nameController,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: InputDecoration(
-                          labelText: 'Nombre de la zona',
-                          hintText: 'Ej. Gimnasio',
-                          errorText: nameError,
+                      ],
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 26),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 44,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
                         ),
-                        onChanged: (_) {
-                          if (nameError != null) {
-                            setModalState(() {
-                              nameError = null;
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Radio: ${radius.toStringAsFixed(0)} m',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      Slider(
-                        value: radius,
-                        min: 50,
-                        max: 1000,
-                        divisions: 19,
-                        label: '${radius.toStringAsFixed(0)} m',
-                        onChanged: (double value) {
-                          setModalState(() {
-                            radius = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: zoneType,
-                        items: _zoneTypeOptions
-                            .map(
-                              (String type) => DropdownMenuItem<String>(
-                                value: type,
-                                child: Text(type),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF34C759).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(16),
                               ),
-                            )
-                            .toList(),
-                        onChanged: (String? value) {
-                          if (value == null) return;
-                          setModalState(() {
-                            zoneType = value;
-                          });
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Tipo de zona',
+                              child: const Icon(
+                                Icons.location_on_rounded,
+                                color: Color(0xFF34C759),
+                                size: 26,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text(
+                                    'Crear zona personalizada',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Configura un punto seguro para habilitar alertas inteligentes en ese lugar.',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () => Navigator.of(modalContext).pop(),
-                            child: const Text('Cancelar'),
+                        const SizedBox(height: 24),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                          const SizedBox(width: 12),
-                          FilledButton(
-                            onPressed: () {
-                              final String name = nameController.text.trim();
-                              if (name.isEmpty) {
-                                setModalState(() {
-                                  nameError = 'Introduce un nombre';
-                                });
-                                return;
-                              }
-                              Navigator.of(modalContext).pop(
-                                CustomZone(
-                                  name: name,
-                                  latitude: position.latitude,
-                                  longitude: position.longitude,
-                                  radius: radius,
-                                  zoneType: zoneType,
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              TextField(
+                                controller: nameController,
+                                textCapitalization: TextCapitalization.words,
+                                style: const TextStyle(color: Colors.white),
+                                decoration: InputDecoration(
+                                  labelText: 'Nombre de la zona',
+                                  hintText: 'Ej. Gimnasio',
+                                  errorText: nameError,
+                                  labelStyle: const TextStyle(color: Colors.white70),
+                                  hintStyle: const TextStyle(color: Colors.white38),
+                                  filled: true,
+                                  fillColor: Colors.white.withValues(alpha: 0.06),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide(
+                                      color: Colors.white.withValues(alpha: 0.08),
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF34C759),
+                                      width: 1.4,
+                                    ),
+                                  ),
                                 ),
-                              );
-                            },
-                            child: const Text('Guardar'),
+                                onChanged: (value) {
+                                  if (nameError != null && value.isNotEmpty) {
+                                    setModalState(() {
+                                      nameError = null;
+                                    });
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 18),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '${position.latitude.toStringAsFixed(5)}, '
+                                      '${position.longitude.toStringAsFixed(5)}',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  const Icon(Icons.near_me, color: Colors.white54, size: 20),
+                                ],
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        const SizedBox(height: 22),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Radio de cobertura',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${radius.toStringAsFixed(0)} metros',
+                                style: const TextStyle(
+                                  color: Color(0xFF34C759),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  activeTrackColor: const Color(0xFF34C759),
+                                  inactiveTrackColor: Colors.white.withValues(alpha: 0.12),
+                                  thumbColor: const Color(0xFF34C759),
+                                  overlayShape: SliderComponentShape.noOverlay,
+                                  trackHeight: 6,
+                                ),
+                                child: Slider(
+                                  value: radius,
+                                  min: 50,
+                                  max: 1000,
+                                  divisions: 19,
+                                  label: '${radius.toStringAsFixed(0)} m',
+                                  onChanged: (double value) {
+                                    setModalState(() {
+                                      radius = value;
+                                    });
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.04),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: DropdownButtonFormField<String>(
+                                  value: zoneType,
+                                  dropdownColor: const Color(0xFF142022),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Tipo de zona',
+                                    labelStyle: TextStyle(color: Colors.white70),
+                                    border: InputBorder.none,
+                                  ),
+                                  items: _zoneTypeOptions
+                                      .map(
+                                        (String type) => DropdownMenuItem<String>(
+                                          value: type,
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.check_circle_outline,
+                                                  size: 18, color: Colors.white54),
+                                              const SizedBox(width: 10),
+                                              Text(
+                                                type,
+                                                style: const TextStyle(color: Colors.white),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (String? value) {
+                                    if (value == null) return;
+                                    setModalState(() {
+                                      zoneType = value;
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 26),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () => Navigator.of(modalContext).pop(),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white70,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                ),
+                                child: const Text('Cancelar'),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: FilledButton.icon(
+                                icon: const Icon(Icons.check_rounded),
+                                onPressed: () {
+                                  final String name = nameController.text.trim();
+                                  if (name.isEmpty) {
+                                    setModalState(() {
+                                      nameError = 'Introduce un nombre';
+                                    });
+                                    return;
+                                  }
+                                  Navigator.of(modalContext).pop(
+                                    CustomZone(
+                                      name: name,
+                                      latitude: position.latitude,
+                                      longitude: position.longitude,
+                                      radius: radius,
+                                      zoneType: zoneType,
+                                    ),
+                                  );
+                                },
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  backgroundColor: const Color(0xFF34C759),
+                                  foregroundColor: Colors.black,
+                                ),
+                                label: const Text('Guardar zona'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
