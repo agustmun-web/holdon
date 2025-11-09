@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../services/security_service.dart';
 
 /// Pantalla de prueba para mostrar los valores de los sensores
@@ -46,161 +47,178 @@ class _SensorTestScreenState extends State<SensorTestScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Prueba de Sensores'),
+        title: Text(l10n.translate('sensor.title')),
         backgroundColor: _isAlarmActive 
             ? Colors.red 
             : _isSecurityActive 
                 ? Colors.green 
                 : Colors.grey,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Estado del sistema
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Estado del Sistema',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Icon(
-                          _isSecurityActive ? Icons.security : Icons.security_outlined,
-                          color: _isSecurityActive ? Colors.green : Colors.grey,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Seguridad: ${_isSecurityActive ? "ACTIVA" : "INACTIVA"}',
-                          style: TextStyle(
-                            color: _isSecurityActive ? Colors.green : Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(
-                          _isAlarmActive ? Icons.warning : Icons.warning_outlined,
-                          color: _isAlarmActive ? Colors.red : Colors.grey,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Alarma: ${_isAlarmActive ? "SONANDO" : "SILENCIOSA"}',
-                          style: TextStyle(
-                            color: _isAlarmActive ? Colors.red : Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
                 ),
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // Instrucciones
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'Instrucciones',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '1. Presiona "Activar Seguridad" para iniciar la detección\n'
-                      '2. Los valores de los sensores aparecerán en el terminal\n'
-                      '3. Mueve el dispositivo bruscamente para probar la detección\n'
-                      '4. Los umbrales son: Aceleración > 50 m/s², Giroscopio > 9 rad/s',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // Botones de control
-            ElevatedButton.icon(
-              onPressed: _toggleSecurity,
-              icon: Icon(_isSecurityActive ? Icons.stop : Icons.play_arrow),
-              label: Text(_isSecurityActive ? 'Desactivar Seguridad' : 'Activar Seguridad'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isSecurityActive ? Colors.red : Colors.green,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-            
-            if (_isAlarmActive) ...[
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _stopAlarm,
-                icon: const Icon(Icons.stop),
-                label: const Text('Detener Alarma'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-              ),
-            ],
-            
-            const SizedBox(height: 24),
-            
-            // Información adicional
-            Card(
-              color: Colors.blue.shade50,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info, color: Colors.blue.shade700),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Información',
-                          style: TextStyle(
-                            color: Colors.blue.shade700,
-                            fontWeight: FontWeight.bold,
-                          ),
+                    // Estado del sistema
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              l10n.translate('sensor.section.status'),
+                              style: Theme.of(context).textTheme.headlineSmall,
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Icon(
+                                  _isSecurityActive ? Icons.security : Icons.security_outlined,
+                                  color: _isSecurityActive ? Colors.green : Colors.grey,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _isSecurityActive
+                                      ? l10n.translate('sensor.security.active')
+                                      : l10n.translate('sensor.security.inactive'),
+                                  style: TextStyle(
+                                    color: _isSecurityActive ? Colors.green : Colors.grey,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(
+                                  _isAlarmActive ? Icons.warning : Icons.warning_outlined,
+                                  color: _isAlarmActive ? Colors.red : Colors.grey,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _isAlarmActive
+                                      ? l10n.translate('sensor.alarm.on')
+                                      : l10n.translate('sensor.alarm.off'),
+                                  style: TextStyle(
+                                    color: _isAlarmActive ? Colors.red : Colors.grey,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Los valores de los sensores se muestran cada 10 eventos en el terminal. '
-                      'Observa la consola para ver los datos en tiempo real.',
-                      style: TextStyle(
-                        color: Colors.blue.shade700,
-                        fontSize: 14,
                       ),
                     ),
+
+                    const SizedBox(height: 24),
+
+                    // Instrucciones
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              l10n.translate('sensor.section.instructions'),
+                              style: Theme.of(context).textTheme.headlineSmall,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              l10n.translate('sensor.instructions.body'),
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Botones de control
+                    ElevatedButton.icon(
+                      onPressed: _toggleSecurity,
+                      icon: Icon(_isSecurityActive ? Icons.stop : Icons.play_arrow),
+                      label: Text(
+                        _isSecurityActive
+                            ? l10n.translate('sensor.button.toggle.active')
+                            : l10n.translate('sensor.button.toggle.inactive'),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _isSecurityActive ? Colors.red : Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+
+                    if (_isAlarmActive) ...[
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _stopAlarm,
+                        icon: const Icon(Icons.stop),
+                        label: Text(l10n.translate('sensor.button.stop.alarm')),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 24),
+
+                    // Información adicional
+                    Card(
+                      color: Colors.blue.shade50,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.info, color: Colors.blue.shade700),
+                                const SizedBox(width: 8),
+                                Text(
+                                  l10n.translate('sensor.section.info'),
+                                  style: TextStyle(
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              l10n.translate('sensor.info.body'),
+                              style: TextStyle(
+                                color: Colors.blue.shade700,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );

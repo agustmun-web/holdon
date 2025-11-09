@@ -206,3 +206,7 @@ Timer? _notificationDebounceTimer;
 ---
 
 *Sistema de geofencing ultra optimizado para máxima precisión y confiabilidad en Android* 🚀
+
+
+
+

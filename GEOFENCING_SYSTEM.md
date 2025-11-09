@@ -106,3 +106,7 @@ El sistema incluye logs detallados para debugging:
 3. Integración con sistema de seguridad
 4. Configuración de permisos de ubicación
 5. Personalización de mensajes por usuario
+
+
+
+

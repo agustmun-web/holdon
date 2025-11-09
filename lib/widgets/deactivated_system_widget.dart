@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 
 class DeactivatedSystemWidget extends StatelessWidget {
   final VoidCallback onReactivateNow;
@@ -12,6 +13,7 @@ class DeactivatedSystemWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -35,21 +37,21 @@ class DeactivatedSystemWidget extends StatelessWidget {
         children: [
           // Título centrado
           Center(
-            child:               Text(
-                'Sistema Desactivado',
-                style: const TextStyle(
-                  color: Color(0xFF9BE7C8),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
+            child: Text(
+              l10n.translate('security.deactivated.title'),
+              style: const TextStyle(
+                color: Color(0xFF9BE7C8),
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
               ),
+            ),
           ),
           
           const SizedBox(height: 12),
           
           // Texto descriptivo
           Text(
-            'Todos los sensores han sido desactivados, no recibirás alertas hasta reactivar el sistema',
+            l10n.translate('security.deactivated.description'),
             style: const TextStyle(
               color: Color(0xFF9BE7C8),
               fontSize: 14,
@@ -61,11 +63,12 @@ class DeactivatedSystemWidget extends StatelessWidget {
           const SizedBox(height: 20),
           
           // Botones
-          Row(
-            children: [
-              // Botón "Programar reactivación"
-              Expanded(
-                child: GestureDetector(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final bool isCompactWidth = constraints.maxWidth < 360;
+
+              Widget buildScheduleButton() {
+                return GestureDetector(
                   onTap: onScheduleReactivation,
                   child: Container(
                     height: 50,
@@ -87,39 +90,27 @@ class DeactivatedSystemWidget extends StatelessWidget {
                           size: 18,
                         ),
                         const SizedBox(width: 8),
-                        const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Programar',
-                              style: TextStyle(
-                                color: Color(0xFF9BE7C8),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
+                        Flexible(
+                          child: Text(
+                            l10n.translate('security.deactivated.schedule'),
+                            style: const TextStyle(
+                              color: Color(0xFF9BE7C8),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
                             ),
-                            Text(
-                              'reactivación',
-                              style: TextStyle(
-                                color: Color(0xFF9BE7C8),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                            textAlign: TextAlign.center,
+                            softWrap: true,
+                            maxLines: 2,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ),
-              
-              const SizedBox(width: 12),
-              
-              // Botón "Reactivar ahora"
-              Expanded(
-                child: GestureDetector(
+                );
+              }
+
+              Widget buildReactivateButton() {
+                return GestureDetector(
                   onTap: onReactivateNow,
                   child: Container(
                     height: 50,
@@ -137,20 +128,45 @@ class DeactivatedSystemWidget extends StatelessWidget {
                           size: 18,
                         ),
                         const SizedBox(width: 8),
-                        const Text(
-                          'Reactivar',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                        Flexible(
+                          child: Text(
+                            l10n.translate('security.deactivated.reactivate'),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                            softWrap: true,
+                            maxLines: 2,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ),
-            ],
+                );
+              }
+
+              if (isCompactWidth) {
+                return Column(
+                  children: [
+                    buildScheduleButton(),
+                    const SizedBox(height: 12),
+                    buildReactivateButton(),
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: buildScheduleButton()),
+                  
+                  const SizedBox(width: 12),
+                  
+                  Expanded(child: buildReactivateButton()),
+                ],
+              );
+            },
           ),
         ],
       ),

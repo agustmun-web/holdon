@@ -268,3 +268,7 @@ Geofencing.instance.setup(
 ---
 
 *Sistema de geofencing completo con notificaciones dinámicas implementado exitosamente* 🚀
+
+
+
+

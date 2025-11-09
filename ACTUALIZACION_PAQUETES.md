@@ -155,3 +155,7 @@ flutter build apk --debug
 ---
 
 *Todas las dependencias han sido actualizadas exitosamente y el proyecto compila correctamente* 🚀
+
+
+
+

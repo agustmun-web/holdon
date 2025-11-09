@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../widgets/activity_card.dart';
 import '../widgets/central_control.dart';
 import '../widgets/feature_control_card.dart';
@@ -6,7 +7,7 @@ import '../widgets/map_preview.dart';
 import '../widgets/deactivated_system_widget.dart';
 import '../services/security_service.dart';
 import '../services/optimized_geofence_service.dart';
-import 'sensor_test_screen.dart';
+import 'settings_screen.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 
@@ -92,29 +93,30 @@ class _SecurityScreenState extends State<SecurityScreen> {
 
   /// Construye el ActivityCard según el estado del hotspot
   Widget _buildActivityCard() {
+    final l10n = context.l10n;
     if (_hotspotActivity == null) {
       // Estado seguro - no está en ningún hotspot
-      return const ActivityCard(
-        statusText: 'Seguro',
-        statusColor: Color(0xFF34A853), // Verde
-        titleText: 'Zona segura',
-        subtitleText: 'Sin hotspots cercanos • Todo en orden',
+      return ActivityCard(
+        statusText: l10n.translate('security.status.safe'),
+        statusColor: const Color(0xFF34A853), // Verde
+        titleText: l10n.translate('security.status.safe.title'),
+        subtitleText: l10n.translate('security.status.safe.subtitle'),
       );
     } else if (_hotspotActivity == 'ALTA') {
       // Estado de alta actividad - hotspot rojo
-      return const ActivityCard(
-        statusText: 'Alta',
-        statusColor: Color(0xFFFF2100), // Rojo
-        titleText: 'Zona de alta actividad',
-        subtitleText: 'Alerta, zona con alta peligrosidad',
+      return ActivityCard(
+        statusText: l10n.translate('security.status.high'),
+        statusColor: const Color(0xFFFF2100), // Rojo
+        titleText: l10n.translate('security.status.high.title'),
+        subtitleText: l10n.translate('security.status.high.subtitle'),
       );
     } else {
       // Estado de media actividad - hotspot ámbar (MODERADA)
-      return const ActivityCard(
-        statusText: 'Media',
-        statusColor: Color(0xFFFF8C00), // Ámbar
-        titleText: 'Zona de actividad moderada',
-        subtitleText: 'Precaución, zona con peligrosidad moderada',
+      return ActivityCard(
+        statusText: l10n.translate('security.status.medium'),
+        statusColor: const Color(0xFFFF8C00), // Ámbar
+        titleText: l10n.translate('security.status.medium.title'),
+        subtitleText: l10n.translate('security.status.medium.subtitle'),
       );
     }
   }
@@ -122,29 +124,38 @@ class _SecurityScreenState extends State<SecurityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: isActive ? const Color(0xFF0E1720) : const Color(0xFF0E1720),
-      body: Stack(
-        children: [
-          // Contenido principal
-          _buildMainContent(),
-        ],
+      backgroundColor: const Color(0xFF0E1720),
+      body: SafeArea(
+        bottom: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final bool isCompactHeight = constraints.maxHeight < 720;
+            return _buildMainContent(isCompactHeight: isCompactHeight);
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildMainContent() {
+  Widget _buildMainContent({required bool isCompactHeight}) {
+    final l10n = context.l10n;
     return Column(
       children: [
           // Header personalizado compacto
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 40, 16, 8),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              isCompactHeight ? 16 : 40,
+              16,
+              isCompactHeight ? 4 : 8,
+            ),
             child: Stack(
               children: [
                 // Título centrado
-                const Center(
+                Center(
                   child: Text(
-                    'Seguridad',
-                    style: TextStyle(
+                    l10n.translate('security.title'),
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
@@ -157,9 +168,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   top: 0,
                   bottom: 0,
                   child: GestureDetector(
-                    onTap: () {
-                      _showSettingsMenu();
-                    },
+                    onTap: _openSettings,
                     child: Container(
                       width: 36,
                       height: 36,
@@ -195,7 +204,12 @@ class _SecurityScreenState extends State<SecurityScreen> {
           // Contenido principal
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(8.0, 0, 8.0, 8.0),
+              padding: EdgeInsets.fromLTRB(
+                8.0,
+                0,
+                8.0,
+                isCompactHeight ? 12.0 : 24.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -283,10 +297,10 @@ class _SecurityScreenState extends State<SecurityScreen> {
                               const SizedBox(width: 8),
                               Text(
                                 _securityService.isAlarmActive
-                                  ? 'Dispositivo posiblemente robado'
+                                  ? l10n.translate('security.system.alarm')
                                   : isActive 
-                                    ? 'Sistema seguro y monitoreando' 
-                                    : 'Monitoreo pausado',
+                                    ? l10n.translate('security.system.active') 
+                                    : l10n.translate('security.system.paused'),
                                 style: TextStyle(
                                   color: _securityService.isAlarmActive
                                     ? const Color(0xFFFFB366) // Naranja claro para alarma
@@ -341,7 +355,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: FeatureControlCard(
-                      title: 'Sensibilidad',
+                      title: l10n.translate('security.sensitivity.title'),
                       value: sensitivity,
                       icon: Icons.graphic_eq,
                       onChanged: (value) {
@@ -373,10 +387,11 @@ class _SecurityScreenState extends State<SecurityScreen> {
 
 
   void _showSensitivityDialog() {
+    final l10n = context.l10n;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Sensibilidad'),
+        title: Text(l10n.translate('security.sensitivity.title')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -397,7 +412,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Aceptar'),
+            child: Text(l10n.translate('common.accept')),
           ),
         ],
       ),
@@ -505,7 +520,12 @@ class _SecurityScreenState extends State<SecurityScreen> {
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Reactivación programada para las $timeString'),
+        content: Text(
+          context.l10n.translate(
+            'security.schedule.confirmation',
+            params: {'time': timeString},
+          ),
+        ),
         backgroundColor: const Color(0xFF34A853),
         duration: const Duration(seconds: 3),
       ),
@@ -515,91 +535,10 @@ class _SecurityScreenState extends State<SecurityScreen> {
   // Mostrar notificación de reactivación
   void _showReactivationNotification() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Sistema reactivado automáticamente'),
-        backgroundColor: Color(0xFF34A853),
-        duration: Duration(seconds: 3),
-      ),
-    );
-  }
-
-  // Método para mostrar el menú de configuración
-  void _showSettingsMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (BuildContext context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle del modal
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Configuración',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF202124),
-                ),
-              ),
-              const SizedBox(height: 20),
-              // Opción de prueba de sensores
-              ListTile(
-                leading: const Icon(
-                  Icons.science,
-                  color: Color(0xFF34A853),
-                ),
-                title: const Text(
-                  'Prueba de Sensores',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF202124),
-                  ),
-                ),
-                subtitle: const Text(
-                  'Ver valores de sensores en tiempo real',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context); // Cerrar modal
-                  _navigateToSensorTest();
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // Navegar a la pantalla de prueba de sensores
-  void _navigateToSensorTest() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SensorTestScreen(),
+      SnackBar(
+        content: Text(context.l10n.translate('security.schedule.notification')),
+        backgroundColor: const Color(0xFF34A853),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -617,13 +556,14 @@ class _SecurityScreenState extends State<SecurityScreen> {
   // Widget del diálogo de programación
   Widget _buildScheduleDialog() {
     TimeOfDay? dialogSelectedTime = _selectedTime;
+    final l10n = context.l10n;
     
     return StatefulBuilder(
       builder: (context, setDialogState) {
         return AlertDialog(
-          title: const Text(
-            'Programar Reactivación',
-            style: TextStyle(
+          title: Text(
+            l10n.translate('security.schedule.dialog.title'),
+            style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w600,
               color: Color(0xFF202124),
@@ -633,9 +573,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Selecciona la hora para reactivar el sistema:',
-                style: TextStyle(
+              Text(
+                l10n.translate('security.schedule.dialog.description'),
+                style: const TextStyle(
                   fontSize: 16,
                   color: Color(0xFF202124),
                 ),
@@ -674,7 +614,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       child: Text(
                         dialogSelectedTime != null 
                           ? '${dialogSelectedTime!.hour.toString().padLeft(2, '0')}:${dialogSelectedTime!.minute.toString().padLeft(2, '0')}'
-                          : 'Seleccionar hora',
+                          : l10n.translate('security.schedule.dialog.pick'),
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w500,
@@ -692,9 +632,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
               onPressed: () {
                 Navigator.of(context).pop();
               },
-              child: const Text(
-                'Cancelar',
-                style: TextStyle(
+              child: Text(
+                l10n.translate('common.cancel'),
+                style: const TextStyle(
                   color: Colors.grey,
                   fontSize: 16,
                 ),
@@ -714,9 +654,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text(
-                'Programar',
-                style: TextStyle(
+              child: Text(
+                l10n.translate('common.schedule'),
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
                 ),
@@ -725,6 +665,15 @@ class _SecurityScreenState extends State<SecurityScreen> {
           ],
         );
       },
+    );
+  }
+
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SettingsScreen(),
+      ),
     );
   }
 

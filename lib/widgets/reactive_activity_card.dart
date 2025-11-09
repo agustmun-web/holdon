@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../services/optimized_geofence_service.dart';
 
 /// Widget reactivo que se actualiza automáticamente cuando cambia el estado de riesgo
@@ -7,6 +8,7 @@ class ReactiveActivityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     // Usar la instancia singleton del servicio
     final geofenceService = OptimizedGeofenceService();
     
@@ -18,7 +20,7 @@ class ReactiveActivityCard extends StatelessWidget {
         final String riskLevel = snapshot.data ?? 'SEGURO';
         
         // Configurar el widget según el nivel de riesgo
-        final Map<String, dynamic> cardConfig = _getCardConfig(riskLevel);
+        final Map<String, dynamic> cardConfig = _getCardConfig(riskLevel, l10n);
         
         return Container(
           margin: const EdgeInsets.all(16.0),
@@ -124,31 +126,31 @@ class ReactiveActivityCard extends StatelessWidget {
   }
 
   /// Obtiene la configuración del widget según el nivel de riesgo
-  Map<String, dynamic> _getCardConfig(String riskLevel) {
+  Map<String, dynamic> _getCardConfig(String riskLevel, AppLocalizations l10n) {
     switch (riskLevel) {
       case 'ALTA':
         return {
-          'statusText': 'Alta',
+          'statusText': l10n.translate('security.status.high'),
           'borderColor': const Color(0xFFFF2100), // Rojo
-          'titleText': 'Zona de alta actividad',
-          'subtitleText': 'Alerta, zona con alta peligrosidad',
+          'titleText': l10n.translate('security.status.high.title'),
+          'subtitleText': l10n.translate('security.status.high.subtitle'),
           'icon': Icons.warning_rounded,
         };
       case 'MODERADA':
         return {
-          'statusText': 'Media',
+          'statusText': l10n.translate('security.status.medium'),
           'borderColor': const Color(0xFFFF8C00), // Ámbar
-          'titleText': 'Zona de actividad moderada',
-          'subtitleText': 'Precaución, zona con peligrosidad moderada',
+          'titleText': l10n.translate('security.status.medium.title'),
+          'subtitleText': l10n.translate('security.status.medium.subtitle'),
           'icon': Icons.info_rounded,
         };
       case 'SEGURO':
       default:
         return {
-          'statusText': 'Seguro',
+          'statusText': l10n.translate('security.status.safe'),
           'borderColor': const Color(0xFF00C851), // Verde
-          'titleText': 'Zona segura',
-          'subtitleText': 'No hay hotspots de riesgo detectados',
+          'titleText': l10n.translate('security.status.safe.title'),
+          'subtitleText': l10n.translate('security.status.safe.subtitle'),
           'icon': Icons.check_circle_rounded,
         };
     }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../services/security_service.dart';
 
 class FeatureControlCard extends StatefulWidget {
@@ -24,6 +25,7 @@ class _FeatureControlCardState extends State<FeatureControlCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Container(
       height: 140,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -62,7 +64,7 @@ class _FeatureControlCardState extends State<FeatureControlCard> {
               const SizedBox(height: 4),
               // Texto descriptivo en el medio
               Text(
-                'Ajusta la sensibilidad del sistema',
+                l10n.translate('security.sensitivity.description'),
                 style: const TextStyle(
                   color: Color(0xFF8FA39A),
                   fontSize: 12,
@@ -100,7 +102,7 @@ class _FeatureControlCardState extends State<FeatureControlCard> {
                       ),
                       child: Center(
                         child: Text(
-                          'Baja',
+                          l10n.translate('security.sensitivity.low'),
                           style: TextStyle(
                             color: widget.value == 0.0 ? const Color(0xFF061B17) : const Color(0xFF9BE7C8),
                             fontSize: 12,
@@ -134,7 +136,7 @@ class _FeatureControlCardState extends State<FeatureControlCard> {
                       ),
                       child: Center(
                         child: Text(
-                          'Normal',
+                          l10n.translate('security.sensitivity.normal'),
                           style: TextStyle(
                             color: widget.value == 0.5 ? const Color(0xFF061B17) : const Color(0xFF9BE7C8),
                             fontSize: 12,
@@ -168,7 +170,7 @@ class _FeatureControlCardState extends State<FeatureControlCard> {
                       ),
                       child: Center(
                         child: Text(
-                          'Alta',
+                          l10n.translate('security.sensitivity.high'),
                           style: TextStyle(
                             color: widget.value == 1.0 ? const Color(0xFF061B17) : const Color(0xFF9BE7C8),
                             fontSize: 12,

@@ -8,10 +8,10 @@ class ActivityCard extends StatelessWidget {
 
   const ActivityCard({
     super.key,
-    this.statusText = 'Media',
-    this.statusColor = const Color(0xFFF7B500),
-    this.titleText = 'Zona con actividad reciente',
-    this.subtitleText = '2 hotspots a 1.2 km • Última alerta hace 30 min',
+    required this.statusText,
+    required this.statusColor,
+    required this.titleText,
+    required this.subtitleText,
   });
 
   @override

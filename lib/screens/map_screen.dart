@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../l10n/app_localizations.dart';
 import '../services/geofence_service.dart';
 
 class MapScreen extends StatefulWidget {
@@ -16,7 +17,8 @@ class _MapScreenState extends State<MapScreen> {
   GoogleMapController? _mapController;
   LatLng? _currentPosition;
   bool _isLoading = true;
-  String _errorMessage = '';
+  String? _errorKey;
+  Map<String, String>? _errorParams;
   final Set<Marker> _markers = {};
   final Set<Circle> _circles = {};
   final GeofenceService _geofenceService = GeofenceService();
@@ -31,6 +33,10 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _initializeMap() async {
+    setState(() {
+      _errorKey = null;
+      _errorParams = null;
+    });
     try {
       await _getCurrentLocation();
       _createHotspotCircles();
@@ -39,7 +45,8 @@ class _MapScreenState extends State<MapScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error al inicializar el mapa: $e';
+        _errorKey = 'map.loading.error';
+        _errorParams = {'error': e.toString()};
         _isLoading = false;
       });
     }
@@ -126,6 +133,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       body: Stack(
         children: [
@@ -136,7 +144,7 @@ class _MapScreenState extends State<MapScreen> {
                 color: Color(0xFF34A853),
               ),
             )
-          else if (_errorMessage.isNotEmpty)
+          else if (_errorKey != null)
             Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -148,7 +156,10 @@ class _MapScreenState extends State<MapScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    _errorMessage,
+                    l10n.translate(
+                      _errorKey!,
+                      params: _errorParams,
+                    ),
                     style: const TextStyle(
                       color: Color(0xFF5F6368),
                       fontSize: 16,
@@ -160,7 +171,8 @@ class _MapScreenState extends State<MapScreen> {
                     onPressed: () {
                       setState(() {
                         _isLoading = true;
-                        _errorMessage = '';
+                        _errorKey = null;
+                        _errorParams = null;
                       });
                       _initializeMap();
                     },
@@ -168,7 +180,7 @@ class _MapScreenState extends State<MapScreen> {
                       backgroundColor: const Color(0xFF34A853),
                       foregroundColor: Colors.white,
                     ),
-                    child: const Text('Reintentar'),
+                    child: Text(l10n.translate('map.retry')),
                   ),
                 ],
               ),
@@ -193,7 +205,7 @@ class _MapScreenState extends State<MapScreen> {
             ),
           
           // Botón flotante para centrar en mi ubicación
-          if (!_isLoading && _errorMessage.isEmpty)
+          if (!_isLoading && _errorKey == null)
             Positioned(
               top: MediaQuery.of(context).padding.top + 16,
               right: 16,
@@ -247,6 +259,8 @@ class _MapScreenState extends State<MapScreen> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
+        final l10n = context.l10n;
+        final activityLabel = _getHotspotActivityLabel(hotspot.activity);
         return AlertDialog(
           title: Row(
             children: [
@@ -257,7 +271,7 @@ class _MapScreenState extends State<MapScreen> {
                     : const Color(0xFFFFC700),
               ),
               const SizedBox(width: 8),
-              const Text('Zona de Hotspot'),
+              Text(l10n.translate('map.hotspot.title')),
             ],
           ),
           content: Column(
@@ -272,8 +286,18 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text('Nivel de Actividad: ${hotspot.activity}'),
-              Text('Radio: ${hotspot.radius.toStringAsFixed(0)} metros'),
+              Text(
+                l10n.translate(
+                  'map.hotspot.activity',
+                  params: {'activity': activityLabel},
+                ),
+              ),
+              Text(
+                l10n.translate(
+                  'map.hotspot.radius',
+                  params: {'meters': hotspot.radius.toStringAsFixed(0)},
+                ),
+              ),
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(8),
@@ -291,8 +315,8 @@ class _MapScreenState extends State<MapScreen> {
                 ),
                 child: Text(
                   hotspot.activity == 'ALTA' 
-                      ? '⚠️ Zona de alta actividad - Ten precaución'
-                      : '⚠️ Zona de actividad moderada - Mantente alerta',
+                      ? l10n.translate('map.hotspot.alert.high')
+                      : l10n.translate('map.hotspot.alert.medium'),
                   style: TextStyle(
                     color: hotspot.activity == 'ALTA' 
                         ? const Color(0xFFFF2100)
@@ -306,7 +330,7 @@ class _MapScreenState extends State<MapScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cerrar'),
+              child: Text(l10n.translate('common.accept')),
             ),
           ],
         );
@@ -316,17 +340,22 @@ class _MapScreenState extends State<MapScreen> {
 
   /// Obtiene el nombre de visualización del hotspot
   String _getHotspotDisplayName(String id) {
-    switch (id) {
-      case 'guardia_civil':
-        return 'Edificio Guardia Civil';
-      case 'hermanitas_pobres':
-        return 'Hermanitas de los Pobres';
-      case 'claret':
-        return 'Claret';
-      case 'camino_ie':
-        return 'Camino IE';
+    final key = 'map.default.hotspot.$id';
+    final translation = context.l10n.translate(key);
+    if (translation == key) {
+      return id;
+    }
+    return translation;
+  }
+
+  String _getHotspotActivityLabel(String activity) {
+    switch (activity) {
+      case 'ALTA':
+        return context.l10n.translate('security.status.high');
+      case 'MODERADA':
+        return context.l10n.translate('security.status.medium');
       default:
-        return id;
+        return activity;
     }
   }
 

@@ -18,11 +18,12 @@ class GeofenceService {
   bool _isInitialized = false;
   bool _isMonitoring = false;
 
-  // Definición de los 4 Hotspots específicos
+  // Definición de los 5 Hotspots específicos
   static const List<GeofenceHotspot> hotspots = [
     // Edificio de la guardia civil (ALTA)
     GeofenceHotspot(
       id: 'guardia_civil',
+      name: 'Edificio Guardia Civil',
       latitude: 40.93599,
       longitude: -4.11286,
       radius: 183.72,
@@ -33,6 +34,7 @@ class GeofenceService {
     // Claret (ALTA)
     GeofenceHotspot(
       id: 'claret',
+      name: 'Claret',
       latitude: 40.94649,
       longitude: -4.11220,
       radius: 116.55,
@@ -40,9 +42,21 @@ class GeofenceService {
       color: '#ff2100',
     ),
     
+    // Chamartín (ALTA)
+    GeofenceHotspot(
+      id: 'chamartin',
+      name: 'Chamartín',
+      latitude: 40.48104,
+      longitude: -3.69538,
+      radius: 2382.0,
+      activity: 'ALTA',
+      color: '#ff2100',
+    ),
+    
     // Hermanitas de los pobres (MODERADA)
     GeofenceHotspot(
       id: 'hermanitas_pobres',
+      name: 'Hermanitas de los pobres',
       latitude: 40.94204,
       longitude: -4.10901,
       radius: 148.69,
@@ -53,6 +67,7 @@ class GeofenceService {
     // Camino IE (MODERADA)
     GeofenceHotspot(
       id: 'camino_ie',
+      name: 'Camino IE',
       latitude: 40.95093,
       longitude: -4.11616,
       radius: 75.40,
@@ -439,6 +454,7 @@ class GeofenceService {
 /// Modelo para representar un hotspot de geofencing
 class GeofenceHotspot {
   final String id;
+  final String name;
   final double latitude;
   final double longitude;
   final double radius;
@@ -447,6 +463,7 @@ class GeofenceHotspot {
 
   const GeofenceHotspot({
     required this.id,
+    required this.name,
     required this.latitude,
     required this.longitude,
     required this.radius,

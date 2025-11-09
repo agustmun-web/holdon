@@ -262,3 +262,7 @@ Notificaciones se envían incluso con pantalla apagada
 ---
 
 *Configuración de permisos y servicios Android corregida para geofencing confiable en segundo plano* 🚀
+
+
+
+

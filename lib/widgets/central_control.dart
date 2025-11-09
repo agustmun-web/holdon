@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 
 class CentralControl extends StatefulWidget {
   final bool isActive;
@@ -94,6 +95,7 @@ class _CentralControlState extends State<CentralControl>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Column(
       children: [
         GestureDetector(
@@ -217,10 +219,10 @@ class _CentralControlState extends State<CentralControl>
         const SizedBox(height: 16),
         Text(
           widget.isAlarmActive 
-            ? 'ALARMA ACTIVADA' 
+            ? l10n.translate('security.central.state.alarm').toUpperCase()
             : widget.isActive 
-              ? 'Activo' 
-              : 'Monitoreo pausado',
+              ? l10n.translate('security.central.state.active')
+              : l10n.translate('security.central.state.paused'),
           style: TextStyle(
             color: widget.isAlarmActive
               ? const Color(0xFFFF8C00)
@@ -234,10 +236,10 @@ class _CentralControlState extends State<CentralControl>
         const SizedBox(height: 8),
         Text(
           widget.isAlarmActive 
-            ? 'Toque para detener alarma'
+            ? l10n.translate('security.central.action.alarm')
             : widget.isActive 
-              ? 'Toque para desactivar' 
-              : 'Toque para activar',
+              ? l10n.translate('security.central.action.deactivate') 
+              : l10n.translate('security.central.action.activate'),
           style: TextStyle(
             color: Colors.grey[600],
             fontSize: 14,

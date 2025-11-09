@@ -47,6 +47,14 @@ class OptimizedGeofenceService {
       radius: 116.55,
       activity: 'ALTA',
     ),
+    GeofenceHotspot(
+      id: 'chamartin',
+      name: 'Chamartín',
+      latitude: 40.48104,
+      longitude: -3.69538,
+      radius: 2382.0,
+      activity: 'ALTA',
+    ),
     // Hotspots MODERADA (Amarillo)
     GeofenceHotspot(
       id: 'hermanitas_pobres',

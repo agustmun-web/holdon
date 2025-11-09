@@ -1,30 +1,58 @@
 import 'package:flutter/material.dart';
-import 'screens/security_screen.dart';
-import 'screens/map_screen.dart';
-import 'services/optimized_geofence_service.dart';
 import 'background/geofence_background_task.dart';
+import 'l10n/app_localizations.dart';
+import 'screens/map_screen.dart';
+import 'screens/security_screen.dart';
+import 'services/optimized_geofence_service.dart';
+import 'state/app_state.dart';
 
 void main() {
   // Configurar tarea en segundo plano para geofencing
   setupBackgroundTask();
-  
-  // SOLO debe haber una llamada a runApp
-  runApp(const MyApp());
+  final appState = AppState();
+
+  runApp(
+    AppStateProvider(
+      appState: appState,
+      child: HoldOnApp(appState: appState),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class HoldOnApp extends StatelessWidget {
+  const HoldOnApp({super.key, required this.appState});
+
+  final AppState appState;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'HoldOn! Anti-Theft App',
-      theme: ThemeData(
-        primarySwatch: Colors.green,
-        scaffoldBackgroundColor: const Color(0xFF0E1720),
-        fontFamily: 'Roboto',
-      ),
-      home: const MainScreen(),
+    return AnimatedBuilder(
+      animation: appState,
+      builder: (context, _) {
+        return MaterialApp(
+          locale: appState.locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localeResolutionCallback: (locale, supportedLocales) {
+            if (locale == null) {
+              return supportedLocales.first;
+            }
+            for (final supportedLocale in supportedLocales) {
+              if (supportedLocale.languageCode == locale.languageCode) {
+                return supportedLocale;
+              }
+            }
+            return supportedLocales.first;
+          },
+          onGenerateTitle: (context) => context.l10n.translate('app.title'),
+          theme: ThemeData(
+            primarySwatch: Colors.green,
+            scaffoldBackgroundColor: const Color(0xFF0E1720),
+            fontFamily: 'Roboto',
+          ),
+          home: const MainScreen(),
+        );
+      },
     );
   }
 }
@@ -86,6 +114,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -107,14 +136,14 @@ class _MainScreenState extends State<MainScreen> {
           backgroundColor: const Color(0xFF061414),
           selectedItemColor: const Color(0xFF34A853),
           unselectedItemColor: Colors.grey[400],
-          items: const [
+          items: [
             BottomNavigationBarItem(
-              icon: Icon(Icons.security),
-              label: 'Seguridad',
+              icon: const Icon(Icons.security),
+              label: l10n.translate('tab.security'),
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.map),
-              label: 'Mapa',
+              icon: const Icon(Icons.map),
+              label: l10n.translate('tab.map'),
             ),
           ],
         ),

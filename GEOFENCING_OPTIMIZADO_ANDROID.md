@@ -176,3 +176,7 @@ El sistema de geofencing ahora es:
 - **Automático**: Se reinicia después del boot
 
 ¡El sistema está listo para producción en Android! 🚀
+
+
+
+

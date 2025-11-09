@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 
 class BottomNavigation extends StatefulWidget {
   const BottomNavigation({super.key});
@@ -12,6 +13,7 @@ class _BottomNavigationState extends State<BottomNavigation> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -31,19 +33,19 @@ class _BottomNavigationState extends State<BottomNavigation> {
             children: [
               _buildNavItem(
                 icon: Icons.security,
-                label: 'Seguridad',
+                label: l10n.translate('tab.security'),
                 index: 0,
                 isActive: selectedIndex == 0,
               ),
               _buildNavItem(
                 icon: Icons.map,
-                label: 'Mapa',
+                label: l10n.translate('tab.map'),
                 index: 1,
                 isActive: selectedIndex == 1,
               ),
               _buildNavItem(
                 icon: Icons.history,
-                label: 'Historial',
+                label: l10n.translate('tab.history'),
                 index: 2,
                 isActive: selectedIndex == 2,
                 badge: 3,
