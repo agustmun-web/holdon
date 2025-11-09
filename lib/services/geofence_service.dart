@@ -7,6 +7,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../models/custom_zone.dart';
+
 class GeofenceService {
   static final GeofenceService _instance = GeofenceService._internal();
   factory GeofenceService() => _instance;
@@ -17,6 +19,11 @@ class GeofenceService {
   
   bool _isInitialized = false;
   bool _isMonitoring = false;
+  bool _geofenceListenerRegistered = false;
+
+  final List<CustomZone> _customZones = <CustomZone>[];
+
+  static const String _customGeofencePrefix = 'custom_zone_';
 
   // Definición de los 5 Hotspots específicos
   static const List<GeofenceHotspot> hotspots = [
@@ -216,24 +223,19 @@ class GeofenceService {
       );
 
       // Crear las regiones de geofencing
-      final Set<GeofenceRegion> regions = hotspots.map((hotspot) => 
-        GeofenceRegion.circular(
-          id: hotspot.id,
-          center: LatLng(hotspot.latitude, hotspot.longitude),
-          radius: hotspot.radius,
-          data: hotspot.activity, // Almacenar el nivel de actividad
-          loiteringDelay: 30000, // 30 segundos antes de cambiar a dwell
-        ),
-      ).toSet();
+      final Set<GeofenceRegion> regions = _buildGeofenceRegions();
 
       // Configurar el callback para eventos de geofencing
-      Geofencing.instance.addGeofenceStatusChangedListener(_onGeofenceStatusChanged);
+      if (!_geofenceListenerRegistered) {
+        Geofencing.instance.addGeofenceStatusChangedListener(_onGeofenceStatusChanged);
+        _geofenceListenerRegistered = true;
+      }
 
       // Iniciar el monitoreo
       await Geofencing.instance.start(regions: regions);
       
       _isMonitoring = true;
-      debugPrint('🚨 Monitoreo de hotspots iniciado - ${hotspots.length} zonas activas');
+      debugPrint('🚨 Monitoreo de zonas iniciado - ${regions.length} zonas activas');
       
       // Mostrar notificación de confirmación
       await _showStartupNotification();
@@ -266,19 +268,25 @@ class GeofenceService {
   ) async {
     debugPrint('🚨 Evento de geofencing detectado: ${region.id} - $status');
     
+    final GeofenceService service = GeofenceService();
+
     // Solo procesar eventos de ENTRADA
     if (status == GeofenceStatus.enter) {
       // Encontrar el hotspot correspondiente
-      final hotspot = hotspots.firstWhere(
-        (h) => h.id == region.id,
-        orElse: () => throw Exception('Hotspot no encontrado: ${region.id}'),
-      );
-      
-      // Disparar notificación específica según el nivel de riesgo
-      if (hotspot.activity == 'ALTA') {
-        await _showHighDangerZoneNotification(hotspot);
-      } else if (hotspot.activity == 'MODERADA') {
-        await _showModerateDangerZoneNotification(hotspot);
+      final GeofenceHotspot? hotspot = service._findHotspot(region.id);
+      if (hotspot != null) {
+        // Disparar notificación específica según el nivel de riesgo
+        if (hotspot.activity == 'ALTA') {
+          await _showHighDangerZoneNotification(hotspot);
+        } else if (hotspot.activity == 'MODERADA') {
+          await _showModerateDangerZoneNotification(hotspot);
+        }
+        return;
+      }
+
+      final CustomZone? customZone = service._findCustomZone(region.id);
+      if (customZone != null) {
+        await service._showCustomZoneNotification(customZone);
       }
     }
   }
@@ -361,7 +369,7 @@ class GeofenceService {
     await _localNotifications.show(
       'startup'.hashCode,
       '🔒 HoldOn - Protección Activa',
-      'Monitoreo de hotspots iniciado. ${hotspots.length} zonas vigiladas.',
+      'Monitoreo de zonas activo. ${hotspots.length + _customZones.length} zonas vigiladas.',
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'system_status',
@@ -407,6 +415,31 @@ class GeofenceService {
   /// Verifica si el servicio está inicializado
   bool get isInitialized => _isInitialized;
 
+  /// Sincroniza la lista de zonas personalizadas vigiladas
+  Future<void> syncCustomZones(List<CustomZone> zones) async {
+    _customZones
+      ..clear()
+      ..addAll(zones.where((zone) => zone.id != null));
+    await _reconfigureGeofencingRegions();
+  }
+
+  /// Registra una nueva zona personalizada y la añade al monitoreo activo
+  Future<void> registerCustomZone(CustomZone zone) async {
+    if (zone.id == null) {
+      debugPrint('⚠️ Intento de registrar zona sin ID, se ignora.');
+      return;
+    }
+
+    final index = _customZones.indexWhere((existing) => existing.id == zone.id);
+    if (index != -1) {
+      _customZones[index] = zone;
+    } else {
+      _customZones.add(zone);
+    }
+
+    await _reconfigureGeofencingRegions();
+  }
+
   /// Verifica si el usuario está dentro de algún hotspot y retorna el nivel de actividad
   Future<String?> getUserHotspotActivity() async {
     try {
@@ -448,6 +481,97 @@ class GeofenceService {
   Future<bool> isUserInsideHotspot() async {
     final String? activity = await getUserHotspotActivity();
     return activity != null;
+  }
+
+  Set<GeofenceRegion> _buildGeofenceRegions() {
+    final Set<GeofenceRegion> regions = hotspots.map((hotspot) {
+      return GeofenceRegion.circular(
+        id: hotspot.id,
+        center: LatLng(hotspot.latitude, hotspot.longitude),
+        radius: hotspot.radius,
+        data: hotspot.activity,
+        loiteringDelay: 30000,
+      );
+    }).toSet();
+
+    for (final CustomZone zone in _customZones) {
+      if (zone.id == null) continue;
+      final regionId = '$_customGeofencePrefix${zone.id}';
+      regions.add(
+        GeofenceRegion.circular(
+          id: regionId,
+          center: LatLng(zone.latitude, zone.longitude),
+          radius: zone.radius,
+          data: zone.zoneType,
+          loiteringDelay: 30000,
+        ),
+      );
+    }
+
+    return regions;
+  }
+
+  Future<void> _reconfigureGeofencingRegions() async {
+    if (!_isMonitoring) return;
+
+    try {
+      await Geofencing.instance.stop(keepsRegions: false);
+      final regions = _buildGeofenceRegions();
+      await Geofencing.instance.start(regions: regions);
+      debugPrint('🔄 Regiones de geofencing reconfiguradas (${regions.length}).');
+    } catch (e) {
+      debugPrint('❌ Error al reconfigurar regiones: $e');
+    }
+  }
+
+  GeofenceHotspot? _findHotspot(String regionId) {
+    for (final GeofenceHotspot hotspot in hotspots) {
+      if (hotspot.id == regionId) {
+        return hotspot;
+      }
+    }
+    return null;
+  }
+
+  CustomZone? _findCustomZone(String regionId) {
+    if (!regionId.startsWith(_customGeofencePrefix)) {
+      return null;
+    }
+    final idString = regionId.substring(_customGeofencePrefix.length);
+    final int? zoneId = int.tryParse(idString);
+    if (zoneId == null) {
+      return null;
+    }
+    for (final CustomZone zone in _customZones) {
+      if (zone.id == zoneId) {
+        return zone;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _showCustomZoneNotification(CustomZone zone) async {
+    await _localNotifications.show(
+      ('$_customGeofencePrefix${zone.id}').hashCode,
+      'Entraste en tu zona ${zone.zoneType}',
+      zone.name,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'custom_zone_alerts',
+          'Zonas Personalizadas',
+          channelDescription: 'Alertas para zonas personalizadas del usuario',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: 'custom_zone_alert:${zone.id}',
+    );
   }
 }
 

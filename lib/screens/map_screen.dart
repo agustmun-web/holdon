@@ -5,6 +5,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../l10n/app_localizations.dart';
 import '../services/geofence_service.dart';
+import '../models/custom_zone.dart';
+import '../services/custom_zone_database.dart';
+import '../services/optimized_geofence_service.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -22,6 +25,16 @@ class _MapScreenState extends State<MapScreen> {
   final Set<Marker> _markers = {};
   final Set<Circle> _circles = {};
   final GeofenceService _geofenceService = GeofenceService();
+  final OptimizedGeofenceService _optimizedGeofenceService = OptimizedGeofenceService();
+  final CustomZoneDatabase _zoneDatabase = CustomZoneDatabase.instance;
+  List<CustomZone> _customZones = <CustomZone>[];
+
+  static const List<String> _zoneTypeOptions = <String>[
+    'Casa',
+    'Trabajo',
+    'Gimnasio',
+    'Otro',
+  ];
   
   // Ubicación por defecto (Madrid, España)
   static const LatLng _defaultLocation = LatLng(40.4168, -3.7038);
@@ -39,7 +52,10 @@ class _MapScreenState extends State<MapScreen> {
     });
     try {
       await _getCurrentLocation();
-      _createHotspotCircles();
+      await _loadCustomZones();
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _isLoading = false;
       });
@@ -192,6 +208,7 @@ class _MapScreenState extends State<MapScreen> {
                 zoom: 14.0,
               ),
               onMapCreated: _onMapCreated,
+              onLongPress: _onMapLongPress,
               markers: _markers,
               circles: _circles,
               myLocationEnabled: true,
@@ -223,35 +240,260 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  /// Crea los círculos de hotspots en el mapa
-  void _createHotspotCircles() {
-    final List<Circle> hotspotCircles = [];
-    
-    for (final hotspot in _geofenceService.hotspotsList) {
-      // Determinar el color según la actividad
-      final Color circleColor = hotspot.activity == 'ALTA' 
-          ? const Color(0xFFFF2100) // Rojo para ALTA
-          : const Color(0xFFFFC700); // Amarillo para MODERADA
-      
-      // Crear el círculo
-      final Circle circle = Circle(
-        circleId: CircleId(hotspot.id),
-        center: LatLng(hotspot.latitude, hotspot.longitude),
-        radius: hotspot.radius,
-        fillColor: circleColor.withValues(alpha: 0.2), // Color de relleno semi-transparente
-        strokeColor: circleColor, // Color del borde
-        strokeWidth: 3,
-        consumeTapEvents: true,
-        onTap: () => _showHotspotInfo(hotspot),
+  Future<void> _loadCustomZones({bool forceRefresh = false}) async {
+    try {
+      final List<CustomZone> zones = List<CustomZone>.from(
+        await _zoneDatabase.getZones(forceRefresh: forceRefresh),
       );
-      
-      hotspotCircles.add(circle);
+      _applyCustomZones(zones);
+      try {
+        await Future.wait([
+          _geofenceService.syncCustomZones(zones),
+          _optimizedGeofenceService.syncCustomZones(zones),
+        ]);
+      } catch (e) {
+        debugPrint('❌ Error al sincronizar geofencing con zonas personalizadas: $e');
+      }
+    } catch (e) {
+      debugPrint('❌ Error al cargar zonas personalizadas: $e');
+      if (_customZones.isEmpty) {
+        _applyCustomZones(const <CustomZone>[]);
+      }
     }
-    
+  }
+
+  void _applyCustomZones(List<CustomZone> zones) {
+    if (!mounted) return;
+    final Set<Circle> circles = _buildMapCircles(zones);
     setState(() {
-      _circles.clear();
-      _circles.addAll(hotspotCircles);
+      _customZones = zones;
+      _circles
+        ..clear()
+        ..addAll(circles);
     });
+  }
+
+  Set<Circle> _buildMapCircles(List<CustomZone> customZones) {
+    final Set<Circle> circles = <Circle>{};
+
+    for (final hotspot in _geofenceService.hotspotsList) {
+      final Color circleColor = hotspot.activity == 'ALTA' 
+          ? const Color(0xFFFF2100)
+          : const Color(0xFFFFC700);
+
+      circles.add(
+        Circle(
+          circleId: CircleId(hotspot.id),
+          center: LatLng(hotspot.latitude, hotspot.longitude),
+          radius: hotspot.radius,
+          fillColor: circleColor.withValues(alpha: 0.2),
+          strokeColor: circleColor,
+          strokeWidth: 3,
+          consumeTapEvents: true,
+          onTap: () => _showHotspotInfo(hotspot),
+        ),
+      );
+    }
+
+    const Color customStrokeColor = Color(0xFF1E88E5);
+
+    for (final CustomZone zone in customZones) {
+      if (zone.id == null) continue;
+      circles.add(
+        Circle(
+          circleId: CircleId('custom_${zone.id}'),
+          center: LatLng(zone.latitude, zone.longitude),
+          radius: zone.radius,
+          fillColor: customStrokeColor.withValues(alpha: 0.18),
+          strokeColor: customStrokeColor,
+          strokeWidth: 2,
+        ),
+      );
+    }
+
+    return circles;
+  }
+
+  Future<void> _onMapLongPress(LatLng position) async {
+    HapticFeedback.mediumImpact();
+    final CustomZone? draftZone = await _showCreateZoneSheet(position);
+    if (draftZone == null) return;
+
+    try {
+      final CustomZone savedZone = await _zoneDatabase.insertZone(draftZone);
+
+      if (mounted) {
+        setState(() {
+          _customZones.removeWhere((zone) => zone.id == savedZone.id);
+          _customZones = <CustomZone>[savedZone, ..._customZones];
+          _circles
+            ..clear()
+            ..addAll(_buildMapCircles(_customZones));
+        });
+      }
+
+      bool registrationSuccessful = true;
+      try {
+        await Future.wait([
+          _geofenceService.registerCustomZone(savedZone),
+          _optimizedGeofenceService.registerCustomZone(savedZone),
+        ]);
+      } catch (e) {
+        registrationSuccessful = false;
+        debugPrint('❌ Error al registrar zona personalizada en geofencing: $e');
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            registrationSuccessful
+                ? 'Zona personalizada guardada'
+                : 'Zona guardada, pero no se pudo activar el geofencing de inmediato',
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('❌ Error al guardar zona personalizada: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo guardar la zona: $e')),
+      );
+    }
+  }
+
+  Future<CustomZone?> _showCreateZoneSheet(LatLng position) async {
+    final TextEditingController nameController = TextEditingController();
+    double radius = 150;
+    String zoneType = _zoneTypeOptions.first;
+    String? nameError;
+
+    final CustomZone? createdZone = await showModalBottomSheet<CustomZone>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext modalContext) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(modalContext).viewInsets.bottom + 24,
+              left: 24,
+              right: 24,
+              top: 24,
+            ),
+            child: StatefulBuilder(
+              builder: (BuildContext context, void Function(void Function()) setModalState) {
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Crear zona personalizada',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: nameController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: InputDecoration(
+                          labelText: 'Nombre de la zona',
+                          hintText: 'Ej. Gimnasio',
+                          errorText: nameError,
+                        ),
+                        onChanged: (_) {
+                          if (nameError != null) {
+                            setModalState(() {
+                              nameError = null;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Radio: ${radius.toStringAsFixed(0)} m',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      Slider(
+                        value: radius,
+                        min: 50,
+                        max: 1000,
+                        divisions: 19,
+                        label: '${radius.toStringAsFixed(0)} m',
+                        onChanged: (double value) {
+                          setModalState(() {
+                            radius = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: zoneType,
+                        items: _zoneTypeOptions
+                            .map(
+                              (String type) => DropdownMenuItem<String>(
+                                value: type,
+                                child: Text(type),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (String? value) {
+                          if (value == null) return;
+                          setModalState(() {
+                            zoneType = value;
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Tipo de zona',
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(modalContext).pop(),
+                            child: const Text('Cancelar'),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton(
+                            onPressed: () {
+                              final String name = nameController.text.trim();
+                              if (name.isEmpty) {
+                                setModalState(() {
+                                  nameError = 'Introduce un nombre';
+                                });
+                                return;
+                              }
+                              Navigator.of(modalContext).pop(
+                                CustomZone(
+                                  name: name,
+                                  latitude: position.latitude,
+                                  longitude: position.longitude,
+                                  radius: radius,
+                                  zoneType: zoneType,
+                                ),
+                              );
+                            },
+                            child: const Text('Guardar'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    nameController.dispose();
+    return createdZone;
   }
 
   /// Muestra información del hotspot cuando se toca

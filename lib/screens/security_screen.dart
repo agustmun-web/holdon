@@ -368,13 +368,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   
                   const SizedBox(height: 16),
                   
-                  // Vista previa del mapa
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    child: const MapPreview(),
-                  ),
-                  
-                  const SizedBox(height: 24),
+                  if (isActive) ...[
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      child: const MapPreview(),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
                 ],
               ),
             ),

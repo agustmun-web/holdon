@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'location_service.dart';
 import '../models/geofence_hotspot.dart';
+import '../models/custom_zone.dart';
 
 /// Servicio de geofencing optimizado para Android con máxima precisión
 /// y detección dual (nativa + manual)
@@ -27,6 +28,10 @@ class OptimizedGeofenceService {
   final Set<String> _notifiedHotspots = <String>{};
   final Map<String, DateTime> _lastNotificationTime = <String, DateTime>{};
   final Map<String, bool> _isInHotspot = <String, bool>{};
+  final List<CustomZone> _customZones = <CustomZone>[];
+  bool _geofenceListenerRegistered = false;
+
+  static const String _customGeofencePrefix = 'custom_zone_';
   
   // Lista de hotspots optimizada
   final List<GeofenceHotspot> hotspots = [
@@ -217,21 +222,15 @@ class OptimizedGeofenceService {
       );
 
       // Configurar regiones de geofencing
-      final regions = hotspots.map((hotspot) => 
-        GeofenceRegion.circular(
-          id: hotspot.id,
-          center: LatLng(hotspot.latitude, hotspot.longitude),
-          radius: hotspot.radius,
-          data: hotspot.activity, // Metadatos del nivel de riesgo
-        )
-      ).toSet();
+      final regions = _buildGeofenceRegions();
 
       // Iniciar geofencing nativo
+      if (!_geofenceListenerRegistered) {
+        Geofencing.instance.addGeofenceStatusChangedListener(_onGeofenceStatusChanged);
+        _geofenceListenerRegistered = true;
+      }
       await Geofencing.instance.start(regions: regions);
       debugPrint('✅ Geofencing nativo iniciado con ${regions.length} regiones');
-
-      // Configurar callback para eventos de geofencing
-      Geofencing.instance.addGeofenceStatusChangedListener(_onGeofenceStatusChanged);
 
       // Iniciar monitoreo manual como respaldo
       _startManualHotspotMonitoring();
@@ -269,40 +268,42 @@ class OptimizedGeofenceService {
 
       // Verificar todos los hotspots
       for (final hotspot in hotspots) {
-        final distance = _locationService.calculateDistance(
-          position.latitude,
-          position.longitude,
-          hotspot.latitude,
-          hotspot.longitude,
-        );
-
-        final isCurrentlyInHotspot = distance <= hotspot.radius;
-        final wasInHotspot = _isInHotspot[hotspot.id] ?? false;
-
-        if (isCurrentlyInHotspot && !wasInHotspot) {
-          // Usuario acaba de entrar a la zona
-          debugPrint('🎯 [MANUAL] ENTRADA detectada en ${hotspot.name} (${distance.toStringAsFixed(1)}m)');
-          
-          // Verificar si ya se notificó recientemente
-          if (_shouldSendNotification(hotspot.id)) {
-            // Mostrar notificación según el nivel de riesgo
+        await _processRegionDistance(
+          regionId: hotspot.id,
+          name: hotspot.name,
+          radius: hotspot.radius,
+          distance: _locationService.calculateDistance(
+            position.latitude,
+            position.longitude,
+            hotspot.latitude,
+            hotspot.longitude,
+          ),
+          onEnter: () async {
             if (hotspot.activity == 'ALTA') {
               await _showHighDangerNotification(hotspot);
             } else {
               await _showModerateDangerNotification(hotspot);
             }
-            
-            // Marcar como notificado
-            _markHotspotAsNotified(hotspot.id);
-          }
-        } else if (!isCurrentlyInHotspot && wasInHotspot) {
-          // Usuario acaba de salir de la zona
-          debugPrint('✅ [MANUAL] SALIDA detectada de ${hotspot.name}');
-          _markHotspotAsExited(hotspot.id);
-        }
+          },
+        );
+      }
 
-        // Actualizar estado actual
-        _isInHotspot[hotspot.id] = isCurrentlyInHotspot;
+      for (final CustomZone zone in _customZones) {
+        if (zone.id == null) continue;
+        final regionId = '$_customGeofencePrefix${zone.id}';
+        final distance = _locationService.calculateDistance(
+          position.latitude,
+          position.longitude,
+          zone.latitude,
+          zone.longitude,
+        );
+        await _processRegionDistance(
+          regionId: regionId,
+          name: zone.name,
+          radius: zone.radius,
+          distance: distance,
+          onEnter: () => _showCustomZoneNotification(zone),
+        );
       }
 
     } catch (e) {
@@ -324,6 +325,30 @@ class OptimizedGeofenceService {
   void _performKeepAlive() {
     debugPrint('💓 Keep-alive: Manteniendo servicios activos...');
     _locationService.requestLocationUpdate();
+  }
+
+  Future<void> _processRegionDistance({
+    required String regionId,
+    required String name,
+    required double radius,
+    required double distance,
+    required FutureOr<void> Function() onEnter,
+  }) async {
+    final bool isCurrentlyInside = distance <= radius;
+    final bool wasInside = _isInHotspot[regionId] ?? false;
+
+    if (isCurrentlyInside && !wasInside) {
+      debugPrint('🎯 [MANUAL] ENTRADA detectada en $name (${distance.toStringAsFixed(1)}m)');
+      if (_shouldSendNotification(regionId)) {
+        await onEnter();
+        _markHotspotAsNotified(regionId);
+      }
+    } else if (!isCurrentlyInside && wasInside) {
+      debugPrint('✅ [MANUAL] SALIDA detectada de $name');
+      _markHotspotAsExited(regionId);
+    }
+
+    _isInHotspot[regionId] = isCurrentlyInside;
   }
 
   /// Verifica si se debe enviar una notificación para un hotspot
@@ -365,31 +390,46 @@ class OptimizedGeofenceService {
     debugPrint('🎯 [NATIVO] Evento de geofencing: ${region.id} - $status');
     
     final instance = OptimizedGeofenceService();
-    final hotspot = instance.hotspots.firstWhere(
-      (h) => h.id == region.id,
-      orElse: () => throw Exception('Hotspot no encontrado'),
-    );
-
+    final hotspot = instance._findHotspot(region.id);
     if (status == GeofenceStatus.enter) {
-      debugPrint('🚨 [NATIVO] Entrada detectada en ${hotspot.name}');
-      
-      // Verificar si ya se notificó recientemente
-      if (instance._shouldSendNotification(hotspot.id)) {
-        // Mostrar notificación según el nivel de riesgo
-        if (hotspot.activity == 'ALTA') {
-          await instance._showHighDangerNotification(hotspot);
+      if (hotspot != null) {
+        debugPrint('🚨 [NATIVO] Entrada detectada en ${hotspot.name}');
+        if (instance._shouldSendNotification(hotspot.id)) {
+          if (hotspot.activity == 'ALTA') {
+            await instance._showHighDangerNotification(hotspot);
+          } else {
+            await instance._showModerateDangerNotification(hotspot);
+          }
+          instance._markHotspotAsNotified(hotspot.id);
         } else {
-          await instance._showModerateDangerNotification(hotspot);
+          debugPrint('⚠️ [NATIVO] Notificación omitida para ${hotspot.name} (ya notificado recientemente)');
         }
-        
-        // Marcar como notificado
-        instance._markHotspotAsNotified(hotspot.id);
-      } else {
-        debugPrint('⚠️ [NATIVO] Notificación omitida para ${hotspot.name} (ya notificado recientemente)');
+        return;
+      }
+
+      final customZone = instance._findCustomZone(region.id);
+      if (customZone != null) {
+        debugPrint('🚨 [NATIVO] Entrada detectada en zona personalizada ${customZone.name}');
+        final customId = '$_customGeofencePrefix${customZone.id}';
+        if (instance._shouldSendNotification(customId)) {
+          await instance._showCustomZoneNotification(customZone);
+          instance._markHotspotAsNotified(customId);
+        }
+        return;
       }
     } else if (status == GeofenceStatus.exit) {
-      debugPrint('✅ [NATIVO] Salida detectada de ${hotspot.name}');
-      instance._markHotspotAsExited(hotspot.id);
+      if (hotspot != null) {
+        debugPrint('✅ [NATIVO] Salida detectada de ${hotspot.name}');
+        instance._markHotspotAsExited(hotspot.id);
+        return;
+      }
+
+      final customZone = instance._findCustomZone(region.id);
+      if (customZone != null) {
+        final customId = '$_customGeofencePrefix${customZone.id}';
+        debugPrint('✅ [NATIVO] Salida detectada de zona personalizada ${customZone.name}');
+        instance._markHotspotAsExited(customId);
+      }
     }
   }
 
@@ -493,6 +533,143 @@ class OptimizedGeofenceService {
         // Por ejemplo, abrir la app o activar el sistema de seguridad
       }
     }
+  }
+
+  GeofenceHotspot? _findHotspot(String regionId) {
+    for (final GeofenceHotspot hotspot in hotspots) {
+      if (hotspot.id == regionId) {
+        return hotspot;
+      }
+    }
+    return null;
+  }
+
+  CustomZone? _findCustomZone(String regionId) {
+    if (!regionId.startsWith(_customGeofencePrefix)) {
+      return null;
+    }
+    final idString = regionId.substring(_customGeofencePrefix.length);
+    final int? zoneId = int.tryParse(idString);
+    if (zoneId == null) return null;
+
+    for (final CustomZone zone in _customZones) {
+      if (zone.id == zoneId) {
+        return zone;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _showCustomZoneNotification(CustomZone zone) async {
+    if (zone.id == null) return;
+
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'custom_zone_alerts',
+      'Zonas Personalizadas',
+      channelDescription: 'Notificaciones para zonas personalizadas del usuario',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      interruptionLevel: InterruptionLevel.active,
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _localNotifications.show(
+      ('$_customGeofencePrefix${zone.id}').hashCode,
+      'Entraste en tu zona ${zone.zoneType}',
+      zone.name,
+      notificationDetails,
+      payload: 'custom_zone_alert:${zone.id}',
+    );
+
+    debugPrint('📘 Notificación de zona personalizada enviada para ${zone.name}');
+  }
+
+  Set<GeofenceRegion> _buildGeofenceRegions() {
+    final Set<GeofenceRegion> regions = hotspots.map((GeofenceHotspot hotspot) {
+      return GeofenceRegion.circular(
+        id: hotspot.id,
+        center: LatLng(hotspot.latitude, hotspot.longitude),
+        radius: hotspot.radius,
+        data: hotspot.activity,
+      );
+    }).toSet();
+
+    for (final CustomZone zone in _customZones) {
+      if (zone.id == null) continue;
+      final regionId = '$_customGeofencePrefix${zone.id}';
+      regions.add(
+        GeofenceRegion.circular(
+          id: regionId,
+          center: LatLng(zone.latitude, zone.longitude),
+          radius: zone.radius,
+          data: zone.zoneType,
+        ),
+      );
+    }
+
+    return regions;
+  }
+
+  Future<void> _reconfigureGeofencingRegions() async {
+    if (!_isMonitoring) return;
+
+    try {
+      await Geofencing.instance.stop(keepsRegions: false);
+      final regions = _buildGeofenceRegions();
+      await Geofencing.instance.start(regions: regions);
+      debugPrint('🔄 Regiones de geofencing reconfiguradas (${regions.length})');
+    } catch (e) {
+      debugPrint('❌ Error al reconfigurar regiones: $e');
+    }
+  }
+
+  void _cleanupStaleRegionState() {
+    final Set<String> validIds = <String>{
+      ...hotspots.map((GeofenceHotspot hotspot) => hotspot.id),
+      ..._customZones
+          .where((CustomZone zone) => zone.id != null)
+          .map((CustomZone zone) => '$_customGeofencePrefix${zone.id}'),
+    };
+
+    _notifiedHotspots.removeWhere((String id) => !validIds.contains(id));
+    _lastNotificationTime.removeWhere((String id, _) => !validIds.contains(id));
+    _isInHotspot.removeWhere((String id, _) => !validIds.contains(id));
+  }
+
+  Future<void> syncCustomZones(List<CustomZone> zones) async {
+    _customZones
+      ..clear()
+      ..addAll(zones.where((CustomZone zone) => zone.id != null));
+    _cleanupStaleRegionState();
+    await _reconfigureGeofencingRegions();
+  }
+
+  Future<void> registerCustomZone(CustomZone zone) async {
+    if (zone.id == null) {
+      debugPrint('⚠️ Intento de registrar zona personalizada sin ID, se ignora.');
+      return;
+    }
+
+    final int index = _customZones.indexWhere((CustomZone element) => element.id == zone.id);
+    if (index != -1) {
+      _customZones[index] = zone;
+    } else {
+      _customZones.add(zone);
+    }
+
+    _cleanupStaleRegionState();
+    await _reconfigureGeofencingRegions();
   }
 
   /// Detiene el monitoreo
