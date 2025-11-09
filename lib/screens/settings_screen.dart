@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
+import '../services/security_service.dart';
 import 'sensor_test_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -11,10 +12,20 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final SecurityService _securityService = SecurityService();
   bool _notificationsEnabled = true;
   bool _vibrationEnabled = true;
   bool _darkModeEnabled = true;
   Locale? _selectedLocale;
+  double _pocketTimerSeconds = 5;
+  bool _isPocketTimerLoading = true;
+  bool _isPocketTimerUpdating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPocketTimerSetting();
+  }
 
   @override
   void didChangeDependencies() {
@@ -70,6 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               });
             },
           ),
+          _buildPocketTimerTile(l10n),
           _buildLanguageTile(
             title: l10n.translate('settings.option.language'),
             subtitle: l10n.translate('settings.option.language.subtitle'),
@@ -101,6 +113,136 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildPocketTimerTile(AppLocalizations l10n) {
+    final int currentSeconds = _pocketTimerSeconds.round();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D131C),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.timer_outlined, color: Color(0xFF34A853)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.translate('settings.option.pocketTimer.title'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.translate('settings.option.pocketTimer.subtitle'),
+                      style: const TextStyle(
+                        color: Color(0xFF9AA0A6),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  l10n.translate(
+                    'settings.option.pocketTimer.value',
+                    params: {'seconds': currentSeconds.toString()},
+                  ),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _isPocketTimerLoading
+              ? const Center(
+                  child: SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: const Color(0xFF34A853),
+                    inactiveTrackColor: Colors.white.withValues(alpha: 0.12),
+                    thumbColor: const Color(0xFF34A853),
+                    overlayShape: SliderComponentShape.noOverlay,
+                    trackHeight: 6,
+                  ),
+                  child: Slider(
+                    value: _pocketTimerSeconds,
+                    min: 3,
+                    max: 10,
+                    divisions: 7,
+                    onChanged: (value) {
+                      setState(() {
+                        _pocketTimerSeconds = value;
+                      });
+                    },
+                    onChangeEnd: (value) {
+                      _updatePocketTimer(value.round());
+                    },
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _loadPocketTimerSetting() async {
+    try {
+      final seconds = await _securityService.getPocketGraceSeconds();
+      if (!mounted) return;
+      setState(() {
+        _pocketTimerSeconds = seconds.toDouble();
+        _isPocketTimerLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isPocketTimerLoading = false;
+      });
+    }
+  }
+
+  Future<void> _updatePocketTimer(int seconds) async {
+    final clamped = seconds.clamp(3, 10).toInt();
+    if (_isPocketTimerUpdating) return;
+    setState(() {
+      _pocketTimerSeconds = clamped.toDouble();
+      _isPocketTimerUpdating = true;
+    });
+    try {
+      await _securityService.setPocketGraceSeconds(clamped);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPocketTimerUpdating = false;
+        });
+      }
+    }
   }
 
   Widget _buildSectionHeader(String title) {

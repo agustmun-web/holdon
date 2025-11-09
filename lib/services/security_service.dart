@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
@@ -11,7 +13,9 @@ import 'anti_theft_manager.dart';
 class SecurityService {
   static final SecurityService _instance = SecurityService._internal();
   factory SecurityService() => _instance;
-  SecurityService._internal();
+  SecurityService._internal() {
+    _initializePocketGraceSeconds();
+  }
   
   final AntiTheftManager _antiTheftManager = AntiTheftManager();
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -40,7 +44,7 @@ class SecurityService {
   /// Activa el sistema de seguridad
   /// 
   /// [showSensorValues] - Si mostrar valores de sensores en terminal (default: true)
-  void activateSecurity({bool showSensorValues = true}) async {
+  Future<void> activateSecurity({bool showSensorValues = true}) async {
     if (_antiTheftManager.isActive) {
       print('⚠️ El sistema de seguridad ya está activo');
       return;
@@ -54,7 +58,7 @@ class SecurityService {
     }
     
     try {
-      _antiTheftManager.activateSecurity(
+      await _antiTheftManager.activateSecurity(
         callbacks: _SecurityCallbacks(this),
         showSensorValues: showSensorValues,
       );
@@ -84,6 +88,14 @@ class SecurityService {
   /// Detiene la alarma sin desactivar el sistema de seguridad
   Future<void> stopAlarmOnly() async {
     await _antiTheftManager.stopAlarm();
+  }
+
+  Future<int> getPocketGraceSeconds() async {
+    return _antiTheftManager.getPocketGraceSeconds();
+  }
+
+  Future<void> setPocketGraceSeconds(int seconds) async {
+    await _antiTheftManager.setPocketGraceSeconds(seconds);
   }
 
   /// Reinicia la detección manualmente
@@ -147,6 +159,10 @@ class SecurityService {
   void dispose() {
     _antiTheftManager.dispose();
     _audioPlayer.dispose();
+  }
+
+  void _initializePocketGraceSeconds() {
+    Future.microtask(() => _antiTheftManager.getPocketGraceSeconds());
   }
 }
 

@@ -25,6 +25,9 @@ class AntiTheftService : Service(), SensorEventListener {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "holdon_antitheft_channel"
         private const val TAG = "AntiTheftService"
+        private const val PREFS_NAME = "holdon_settings"
+        private const val KEY_POCKET_GRACE_SECONDS = "pocket_grace_seconds"
+        var instance: AntiTheftService? = null
     }
     
     // Umbrales de detección variables (por defecto NORMAL)
@@ -35,6 +38,7 @@ class AntiTheftService : Service(), SensorEventListener {
     private var isPocketProtocolActive = false
     private var pocketTimer: CountDownTimer? = null
     private val POCKET_LUX_THRESHOLD = 1.0f
+    private var pocketGraceSeconds = 5
     
     private var sensorManager: SensorManager? = null
     private var accelerometer: Sensor? = null
@@ -102,6 +106,7 @@ class AntiTheftService : Service(), SensorEventListener {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "AntiTheftService onCreate")
+        instance = this
         
         // Inicializar sensores
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -149,6 +154,9 @@ class AntiTheftService : Service(), SensorEventListener {
         
         // Obtener parámetros del intent
         showSensorValues = intent?.getBooleanExtra("showSensorValues", true) ?: true
+        pocketGraceSeconds = intent?.getIntExtra("pocketGraceSeconds", getStoredPocketGraceSeconds())
+            ?: getStoredPocketGraceSeconds()
+        savePocketGraceSeconds(pocketGraceSeconds)
         
         // Crear notificación y iniciar como foreground service
         val notification = createNotification()
@@ -163,6 +171,7 @@ class AntiTheftService : Service(), SensorEventListener {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "AntiTheftService onDestroy")
+        instance = null
         
         stopDetection()
         
@@ -725,9 +734,9 @@ class AntiTheftService : Service(), SensorEventListener {
                     
                     Log.d(TAG, "🚨 EVENTO DESENCADENANTE DETECTADO!")
                     Log.d(TAG, "🚨 Móvil sacado del bolsillo - Luz: ${lightValue} lux (umbral: ${POCKET_LUX_THRESHOLD} lux)")
-                    Log.d(TAG, "🚨 Protocolo DESARMADO - Iniciando período de gracia de 5 segundos...")
+                    Log.d(TAG, "🚨 Protocolo DESARMADO - Iniciando período de gracia de ${pocketGraceSeconds} segundos...")
                     
-                    // Iniciar temporizador de 5 segundos
+                    // Iniciar temporizador configurado
                     startPocketTimer()
                     
                     ServiceEventManager.sendEvent(mapOf(
@@ -746,15 +755,16 @@ class AntiTheftService : Service(), SensorEventListener {
     }
     
     /**
-     * Inicia el temporizador de 5 segundos para el Protocolo de Bolsillo
+     * Inicia el temporizador configurable para el Protocolo de Bolsillo
      */
     private fun startPocketTimer() {
         // Cancelar temporizador existente si hay uno
         cancelPocketTimer()
         
-        Log.d(TAG, "⏰ Iniciando temporizador de 5 segundos para Protocolo de Bolsillo")
+        Log.d(TAG, "⏰ Iniciando temporizador de ${pocketGraceSeconds} segundos para Protocolo de Bolsillo")
         
-        pocketTimer = object : CountDownTimer(5000, 1000) {
+        val durationMillis = pocketGraceSeconds * 1000L
+        pocketTimer = object : CountDownTimer(durationMillis, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 val secondsRemaining = (millisUntilFinished / 1000).toInt()
                 Log.d(TAG, "⏰ Temporizador de bolsillo: ${secondsRemaining} segundos restantes")
@@ -785,7 +795,7 @@ class AntiTheftService : Service(), SensorEventListener {
         
         ServiceEventManager.sendEvent(mapOf(
             "type" to "pocket_timer_started",
-            "message" to "Período de gracia iniciado - 5 segundos")
+            "message" to "Período de gracia iniciado - $pocketGraceSeconds segundos")
         )
     }
     
@@ -803,5 +813,21 @@ class AntiTheftService : Service(), SensorEventListener {
                 "message" to "Temporizador cancelado - Usuario desbloqueó el dispositivo")
             )
         }
+    }
+    fun updatePocketGraceSeconds(seconds: Int) {
+        val clamped = seconds.coerceIn(3, 10)
+        pocketGraceSeconds = clamped
+        savePocketGraceSeconds(clamped)
+        Log.d(TAG, "⏱️ Temporizador de bolsillo actualizado a $clamped segundos")
+    }
+
+    private fun getStoredPocketGraceSeconds(): Int {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getInt(KEY_POCKET_GRACE_SECONDS, 5).coerceIn(3, 10)
+    }
+
+    private fun savePocketGraceSeconds(seconds: Int) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putInt(KEY_POCKET_GRACE_SECONDS, seconds.coerceIn(3, 10)).apply()
     }
 }

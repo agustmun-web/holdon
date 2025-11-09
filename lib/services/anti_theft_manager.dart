@@ -34,6 +34,8 @@ class AntiTheftManager {
   bool _isActive = false;
   bool _isAlarmActive = false;
   bool _showSensorValues = true; // Mostrar valores de sensores en terminal
+  int _pocketGraceSeconds = 5;
+  bool _pocketGraceLoaded = false;
   
   /// Verifica si el sistema de seguridad está activo
   bool get isActive => _isActive;
@@ -65,10 +67,10 @@ class AntiTheftManager {
   /// [showSensorValues] - Si mostrar valores de sensores en terminal (default: true)
   /// 
   /// Lanza [StateError] si el sistema ya está activo
-  void activateSecurity({
+  Future<void> activateSecurity({
     required AlarmCallbacks callbacks,
     bool showSensorValues = true,
-  }) {
+  }) async {
     if (_isActive) {
       throw StateError('El sistema de seguridad ya está activo');
     }
@@ -77,8 +79,10 @@ class AntiTheftManager {
     _isActive = true;
     _showSensorValues = showSensorValues;
     
+    await _ensurePocketGraceSecondsLoaded();
+    
     // Iniciar Foreground Service
-    _startForegroundService();
+    await _startForegroundService();
 
     // Iniciar escucha de eventos del servicio
     _startServiceEventListening();
@@ -127,6 +131,7 @@ class AntiTheftManager {
     try {
       await _platformChannel.invokeMethod('startForegroundService', {
         'showSensorValues': _showSensorValues,
+        'pocketGraceSeconds': _pocketGraceSeconds,
       });
       print('🚀 Foreground Service iniciado');
     } catch (e) {
@@ -356,6 +361,38 @@ class AntiTheftManager {
     } catch (e) {
       print('❌ Error al reiniciar detección: $e');
     }
+  }
+  
+  Future<int> getPocketGraceSeconds() async {
+    await _ensurePocketGraceSecondsLoaded();
+    return _pocketGraceSeconds;
+  }
+  
+  Future<void> setPocketGraceSeconds(int seconds) async {
+    final clamped = seconds.clamp(3, 10).toInt();
+    _pocketGraceSeconds = clamped;
+    _pocketGraceLoaded = true;
+    try {
+      await _platformChannel.invokeMethod('setPocketGraceSeconds', {
+        'seconds': clamped,
+      });
+      print('🛡️ Temporizador de bolsillo configurado a $clamped segundos');
+    } catch (e) {
+      print('❌ Error al configurar temporizador de bolsillo: $e');
+    }
+  }
+
+  Future<void> _ensurePocketGraceSecondsLoaded() async {
+    if (_pocketGraceLoaded) return;
+    try {
+      final result = await _platformChannel.invokeMethod<int>('getPocketGraceSeconds');
+      if (result != null) {
+        _pocketGraceSeconds = result.clamp(3, 10).toInt();
+      }
+    } catch (e) {
+      print('❌ Error al obtener temporizador de bolsillo almacenado: $e');
+    }
+    _pocketGraceLoaded = true;
   }
 
   /// Obtiene el estado actual de los sensores

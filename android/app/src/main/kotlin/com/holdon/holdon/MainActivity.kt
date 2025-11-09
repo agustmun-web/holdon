@@ -17,6 +17,8 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "holdon.device_lock"
     private val VOLUME_CHANNEL = "holdon.volume_monitor"
     private val SERVICE_CHANNEL = "holdon.service_events"
+    private val PREFS_NAME = "holdon_settings"
+    private val KEY_POCKET_GRACE_SECONDS = "pocket_grace_seconds"
     private var devicePolicyManager: DevicePolicyManager? = null
     private var adminComponent: ComponentName? = null
     private var audioManager: AudioManager? = null
@@ -69,6 +71,12 @@ class MainActivity : FlutterActivity() {
                 }
                 "setSensitivityLevel" -> {
                     setSensitivityLevel(call, result)
+                }
+                "setPocketGraceSeconds" -> {
+                    setPocketGraceSeconds(call, result)
+                }
+                "getPocketGraceSeconds" -> {
+                    result.success(getStoredPocketGraceSeconds())
                 }
                 else -> {
                     result.notImplemented()
@@ -152,10 +160,15 @@ class MainActivity : FlutterActivity() {
     private fun startForegroundService(call: MethodCall, result: MethodChannel.Result) {
         try {
             val showSensorValues = call.argument<Boolean>("showSensorValues") ?: true
+            val pocketGraceSeconds = call.argument<Int>("pocketGraceSeconds")
+                ?: getStoredPocketGraceSeconds()
             
             val intent = Intent(this, AntiTheftService::class.java).apply {
                 putExtra("showSensorValues", showSensorValues)
+                putExtra("pocketGraceSeconds", pocketGraceSeconds)
             }
+            
+            savePocketGraceSeconds(pocketGraceSeconds)
             
             startForegroundService(intent)
             
@@ -165,6 +178,28 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             result.error("SERVICE_START_FAILED", "Failed to start foreground service: ${e.message}", null)
         }
+    }
+    
+    private fun setPocketGraceSeconds(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            val secondsArgument = call.argument<Int>("seconds") ?: 5
+            val clamped = secondsArgument.coerceIn(3, 10)
+            savePocketGraceSeconds(clamped)
+            (AntiTheftService.instance ?: antiTheftService)?.updatePocketGraceSeconds(clamped)
+            result.success("Pocket grace seconds set to $clamped")
+        } catch (e: Exception) {
+            result.error("POCKET_TIMER_FAILED", "Failed to set pocket timer: ${e.message}", null)
+        }
+    }
+    
+    private fun getStoredPocketGraceSeconds(): Int {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getInt(KEY_POCKET_GRACE_SECONDS, 5).coerceIn(3, 10)
+    }
+    
+    private fun savePocketGraceSeconds(seconds: Int) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putInt(KEY_POCKET_GRACE_SECONDS, seconds.coerceIn(3, 10)).apply()
     }
     
     private fun stopForegroundService(result: MethodChannel.Result) {

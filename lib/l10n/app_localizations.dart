@@ -105,6 +105,18 @@ class AppLocalizations {
       'es': 'Ver valores de sensores en tiempo real',
       'en': 'See real-time sensor values',
     },
+    'settings.option.pocketTimer.title': {
+      'es': 'Temporizador de bolsillo',
+      'en': 'Pocket timer',
+    },
+    'settings.option.pocketTimer.subtitle': {
+      'es': 'Tiempo de gracia antes de activar la alarma cuando se saca el móvil del bolsillo',
+      'en': 'Grace period before triggering the alarm when the phone leaves your pocket',
+    },
+    'settings.option.pocketTimer.value': {
+      'es': '{seconds} segundos',
+      'en': '{seconds} seconds',
+    },
     'security.title': {
       'es': 'Seguridad',
       'en': 'Security',
