@@ -1,16 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/custom_zone.dart';
 import '../services/custom_zone_database.dart';
+import '../services/custom_zone_events.dart';
 import '../services/geofence_service.dart';
 import '../services/optimized_geofence_service.dart';
 
 class CustomZonesScreen extends StatefulWidget {
-  const CustomZonesScreen({super.key, required this.zoneRevision});
-
-  final ValueNotifier<int> zoneRevision;
+  const CustomZonesScreen({super.key});
 
   @override
   State<CustomZonesScreen> createState() => _CustomZonesScreenState();
@@ -26,28 +27,23 @@ class _CustomZonesScreenState extends State<CustomZonesScreen> {
   String? _errorMessage;
   int? _deletingZoneId;
   bool _reloadScheduled = false;
+  late final StreamSubscription<void> _zoneSubscription;
 
   @override
   void initState() {
     super.initState();
-    widget.zoneRevision.addListener(_onZonesChanged);
+    _zoneSubscription = CustomZoneEvents.instance.stream.listen((_) {
+      if (mounted) {
+        _scheduleReload();
+      }
+    });
     _loadZones();
   }
 
   @override
   void dispose() {
-    widget.zoneRevision.removeListener(_onZonesChanged);
+    _zoneSubscription.cancel();
     super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(CustomZonesScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.zoneRevision != widget.zoneRevision) {
-      oldWidget.zoneRevision.removeListener(_onZonesChanged);
-      widget.zoneRevision.addListener(_onZonesChanged);
-      _loadZones(forceRefresh: true, showLoader: false);
-    }
   }
 
   Future<void> _loadZones({bool showLoader = true, bool forceRefresh = false}) async {
@@ -75,7 +71,7 @@ class _CustomZonesScreenState extends State<CustomZonesScreen> {
     }
   }
 
-  void _onZonesChanged() {
+  void _scheduleReload() {
     if (!mounted || _reloadScheduled) return;
     _reloadScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -136,6 +132,7 @@ class _CustomZonesScreenState extends State<CustomZonesScreen> {
     try {
       await _zoneDatabase.deleteZone(zone.id!);
       deleted = true;
+      _scheduleReload();
       final List<CustomZone> zones = await _zoneDatabase.getZones(forceRefresh: true);
       await Future.wait([
         _geofenceService.syncCustomZones(zones),
@@ -164,11 +161,7 @@ class _CustomZonesScreenState extends State<CustomZonesScreen> {
         });
       }
       if (deleted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            widget.zoneRevision.value = widget.zoneRevision.value + 1;
-          }
-        });
+        _scheduleReload();
       }
     }
   }

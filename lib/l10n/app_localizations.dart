@@ -345,6 +345,66 @@ class AppLocalizations {
       'es': 'No se pudieron cargar las zonas: {error}',
       'en': 'Could not load zones: {error}',
     },
+    'zones.create.title': {
+      'es': 'Crear zona personalizada',
+      'en': 'Create custom zone',
+    },
+    'zones.create.subtitle': {
+      'es': 'Configura un punto seguro para habilitar alertas inteligentes en ese lugar.',
+      'en': 'Configure a safe point to enable smart alerts in that area.',
+    },
+    'zones.create.name': {
+      'es': 'Nombre de la zona',
+      'en': 'Zone name',
+    },
+    'zones.create.name.hint': {
+      'es': 'Ej. Gimnasio',
+      'en': 'e.g. Gym',
+    },
+    'zones.create.name.error': {
+      'es': 'Introduce un nombre',
+      'en': 'Enter a name',
+    },
+    'zones.create.coordinates': {
+      'es': 'Coordenadas',
+      'en': 'Coordinates',
+    },
+    'zones.create.radius.title': {
+      'es': 'Radio de cobertura',
+      'en': 'Coverage radius',
+    },
+    'zones.create.radius.subtitle': {
+      'es': '{meters} metros',
+      'en': '{meters} meters',
+    },
+    'zones.create.type': {
+      'es': 'Tipo de zona',
+      'en': 'Zone type',
+    },
+    'zones.create.cancel': {
+      'es': 'Cancelar',
+      'en': 'Cancel',
+    },
+    'zones.create.save': {
+      'es': 'Guardar zona',
+      'en': 'Save zone',
+    },
+    'zones.type.house': {
+      'es': 'Casa',
+      'en': 'Home',
+    },
+    'zones.type.work': {
+      'es': 'Trabajo',
+      'en': 'Work',
+    },
+    'zones.type.gym': {
+      'es': 'Gimnasio',
+      'en': 'Gym',
+    },
+    'zones.type.other': {
+      'es': 'Otro',
+      'en': 'Other',
+    },
     'sensor.title': {
       'es': 'Prueba de Sensores',
       'en': 'Sensor Test',

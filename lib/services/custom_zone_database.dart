@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/custom_zone.dart';
+import 'custom_zone_events.dart';
 
 class CustomZoneDatabase {
   CustomZoneDatabase._internal();
@@ -77,6 +78,7 @@ class CustomZoneDatabase {
 
     final savedZone = zone.copyWith(id: id);
     _cachedZones.insert(0, savedZone);
+    CustomZoneEvents.instance.notifyChanged();
     return savedZone;
   }
 
@@ -88,6 +90,7 @@ class CustomZoneDatabase {
       whereArgs: [id],
     );
     _cachedZones.removeWhere((zone) => zone.id == id);
+    CustomZoneEvents.instance.notifyChanged();
   }
 
   Future<void> updateZone(CustomZone zone) async {
@@ -108,6 +111,7 @@ class CustomZoneDatabase {
     if (index != -1) {
       _cachedZones[index] = zone;
     }
+    CustomZoneEvents.instance.notifyChanged();
   }
 
   Future<void> close() async {

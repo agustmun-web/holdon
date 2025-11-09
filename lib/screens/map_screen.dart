@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,12 +10,11 @@ import '../l10n/app_localizations.dart';
 import '../services/geofence_service.dart';
 import '../models/custom_zone.dart';
 import '../services/custom_zone_database.dart';
+import '../services/custom_zone_events.dart';
 import '../services/optimized_geofence_service.dart';
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key, this.zoneRevision});
-
-  final ValueNotifier<int>? zoneRevision;
+  const MapScreen({super.key});
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -30,14 +31,15 @@ class _MapScreenState extends State<MapScreen> {
   final GeofenceService _geofenceService = GeofenceService();
   final OptimizedGeofenceService _optimizedGeofenceService = OptimizedGeofenceService();
   final CustomZoneDatabase _zoneDatabase = CustomZoneDatabase.instance;
+  late final StreamSubscription<void> _zoneSubscription;
   List<CustomZone> _customZones = <CustomZone>[];
   bool _zoneReloadScheduled = false;
 
-  static const List<String> _zoneTypeOptions = <String>[
-    'Casa',
-    'Trabajo',
-    'Gimnasio',
-    'Otro',
+  static const List<String> _zoneTypeKeys = <String>[
+    'zones.type.house',
+    'zones.type.work',
+    'zones.type.gym',
+    'zones.type.other',
   ];
   
   // Ubicación por defecto (Madrid, España)
@@ -46,17 +48,12 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    widget.zoneRevision?.addListener(_onZoneRevisionChanged);
+    _zoneSubscription = CustomZoneEvents.instance.stream.listen((_) {
+      if (mounted) {
+        _scheduleZoneReload();
+      }
+    });
     _initializeMap();
-  }
-
-  @override
-  void didUpdateWidget(MapScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.zoneRevision != widget.zoneRevision) {
-      oldWidget.zoneRevision?.removeListener(_onZoneRevisionChanged);
-      widget.zoneRevision?.addListener(_onZoneRevisionChanged);
-    }
   }
 
   Future<void> _initializeMap() async {
@@ -276,7 +273,7 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _onZoneRevisionChanged() {
+  void _scheduleZoneReload() {
     if (!mounted || _zoneReloadScheduled) return;
     _zoneReloadScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -379,14 +376,6 @@ class _MapScreenState extends State<MapScreen> {
         ),
       );
 
-      final revision = widget.zoneRevision;
-      if (revision != null && mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            revision.value = revision.value + 1;
-          }
-        });
-      }
     } catch (e) {
       debugPrint('❌ Error al guardar zona personalizada: $e');
       if (!mounted) return;
@@ -399,7 +388,7 @@ class _MapScreenState extends State<MapScreen> {
   Future<CustomZone?> _showCreateZoneSheet(LatLng position) async {
     final TextEditingController nameController = TextEditingController();
     double radius = 150;
-    String zoneType = _zoneTypeOptions.first;
+    String zoneTypeKey = _zoneTypeKeys.first;
     String? nameError;
 
     final CustomZone? createdZone = await showModalBottomSheet<CustomZone>(
@@ -466,19 +455,19 @@ class _MapScreenState extends State<MapScreen> {
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: const [
+                                children: [
                                   Text(
-                                    'Crear zona personalizada',
-                                    style: TextStyle(
+                                    context.l10n.translate('zones.create.title'),
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w700,
                                       color: Colors.white,
                                     ),
                                   ),
-                                  SizedBox(height: 4),
+                                  const SizedBox(height: 4),
                                   Text(
-                                    'Configura un punto seguro para habilitar alertas inteligentes en ese lugar.',
-                                    style: TextStyle(
+                                    context.l10n.translate('zones.create.subtitle'),
+                                    style: const TextStyle(
                                       color: Colors.white70,
                                       fontSize: 13,
                                     ),
@@ -503,8 +492,8 @@ class _MapScreenState extends State<MapScreen> {
                                 textCapitalization: TextCapitalization.words,
                                 style: const TextStyle(color: Colors.white),
                                 decoration: InputDecoration(
-                                  labelText: 'Nombre de la zona',
-                                  hintText: 'Ej. Gimnasio',
+                                  labelText: context.l10n.translate('zones.create.name'),
+                                  hintText: context.l10n.translate('zones.create.name.hint'),
                                   errorText: nameError,
                                   labelStyle: const TextStyle(color: Colors.white70),
                                   hintStyle: const TextStyle(color: Colors.white38),
@@ -576,7 +565,10 @@ class _MapScreenState extends State<MapScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '${radius.toStringAsFixed(0)} metros',
+                                context.l10n.translate(
+                                  'zones.create.radius.subtitle',
+                                  params: {'meters': radius.toStringAsFixed(0)},
+                                ),
                                 style: const TextStyle(
                                   color: Color(0xFF34C759),
                                   fontWeight: FontWeight.w600,
@@ -612,24 +604,24 @@ class _MapScreenState extends State<MapScreen> {
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: DropdownButtonFormField<String>(
-                                  value: zoneType,
+                                  value: zoneTypeKey,
                                   dropdownColor: const Color(0xFF142022),
-                                  decoration: const InputDecoration(
-                                    labelText: 'Tipo de zona',
-                                    labelStyle: TextStyle(color: Colors.white70),
+                                  decoration: InputDecoration(
+                                    labelText: context.l10n.translate('zones.create.type'),
+                                    labelStyle: const TextStyle(color: Colors.white70),
                                     border: InputBorder.none,
                                   ),
-                                  items: _zoneTypeOptions
+                                  items: _zoneTypeKeys
                                       .map(
-                                        (String type) => DropdownMenuItem<String>(
-                                          value: type,
+                                        (String key) => DropdownMenuItem<String>(
+                                          value: key,
                                           child: Row(
                                             children: [
                                               const Icon(Icons.check_circle_outline,
                                                   size: 18, color: Colors.white54),
                                               const SizedBox(width: 10),
                                               Text(
-                                                type,
+                                                context.l10n.translate(key),
                                                 style: const TextStyle(color: Colors.white),
                                               ),
                                             ],
@@ -640,7 +632,7 @@ class _MapScreenState extends State<MapScreen> {
                                   onChanged: (String? value) {
                                     if (value == null) return;
                                     setModalState(() {
-                                      zoneType = value;
+                                      zoneTypeKey = value;
                                     });
                                   },
                                 ),
@@ -658,7 +650,7 @@ class _MapScreenState extends State<MapScreen> {
                                   foregroundColor: Colors.white70,
                                   padding: const EdgeInsets.symmetric(vertical: 16),
                                 ),
-                                child: const Text('Cancelar'),
+                                child: Text(context.l10n.translate('zones.create.cancel')),
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -669,7 +661,8 @@ class _MapScreenState extends State<MapScreen> {
                                   final String name = nameController.text.trim();
                                   if (name.isEmpty) {
                                     setModalState(() {
-                                      nameError = 'Introduce un nombre';
+                                      nameError =
+                                          context.l10n.translate('zones.create.name.error');
                                     });
                                     return;
                                   }
@@ -679,7 +672,7 @@ class _MapScreenState extends State<MapScreen> {
                                       latitude: position.latitude,
                                       longitude: position.longitude,
                                       radius: radius,
-                                      zoneType: zoneType,
+                                      zoneType: context.l10n.translate(zoneTypeKey),
                                     ),
                                   );
                                 },
@@ -688,7 +681,7 @@ class _MapScreenState extends State<MapScreen> {
                                   backgroundColor: const Color(0xFF34C759),
                                   foregroundColor: Colors.black,
                                 ),
-                                label: const Text('Guardar zona'),
+                                label: Text(context.l10n.translate('zones.create.save')),
                               ),
                             ),
                           ],
@@ -815,7 +808,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
-    widget.zoneRevision?.removeListener(_onZoneRevisionChanged);
+    _zoneSubscription.cancel();
     // Limpiar recursos del mapa para evitar warnings
     _mapController?.dispose();
     _mapController = null;
