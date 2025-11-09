@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -10,7 +11,9 @@ import '../services/custom_zone_database.dart';
 import '../services/optimized_geofence_service.dart';
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  const MapScreen({super.key, this.zoneRevision});
+
+  final ValueNotifier<int>? zoneRevision;
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -28,6 +31,7 @@ class _MapScreenState extends State<MapScreen> {
   final OptimizedGeofenceService _optimizedGeofenceService = OptimizedGeofenceService();
   final CustomZoneDatabase _zoneDatabase = CustomZoneDatabase.instance;
   List<CustomZone> _customZones = <CustomZone>[];
+  bool _zoneReloadScheduled = false;
 
   static const List<String> _zoneTypeOptions = <String>[
     'Casa',
@@ -42,7 +46,17 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    widget.zoneRevision?.addListener(_onZoneRevisionChanged);
     _initializeMap();
+  }
+
+  @override
+  void didUpdateWidget(MapScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.zoneRevision != widget.zoneRevision) {
+      oldWidget.zoneRevision?.removeListener(_onZoneRevisionChanged);
+      widget.zoneRevision?.addListener(_onZoneRevisionChanged);
+    }
   }
 
   Future<void> _initializeMap() async {
@@ -262,6 +276,17 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  void _onZoneRevisionChanged() {
+    if (!mounted || _zoneReloadScheduled) return;
+    _zoneReloadScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _zoneReloadScheduled = false;
+      if (mounted) {
+        _loadCustomZones(forceRefresh: true);
+      }
+    });
+  }
+
   void _applyCustomZones(List<CustomZone> zones) {
     if (!mounted) return;
     final Set<Circle> circles = _buildMapCircles(zones);
@@ -353,6 +378,11 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ),
       );
+
+      final revision = widget.zoneRevision;
+      if (revision != null) {
+        revision.value = revision.value + 1;
+      }
     } catch (e) {
       debugPrint('❌ Error al guardar zona personalizada: $e');
       if (!mounted) return;
@@ -603,6 +633,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
+    widget.zoneRevision?.removeListener(_onZoneRevisionChanged);
     // Limpiar recursos del mapa para evitar warnings
     _mapController?.dispose();
     _mapController = null;

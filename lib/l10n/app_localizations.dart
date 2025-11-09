@@ -37,6 +37,10 @@ class AppLocalizations {
       'es': 'Mapa',
       'en': 'Map',
     },
+    'tab.zones': {
+      'es': 'Zonas',
+      'en': 'Zones',
+    },
     'tab.history': {
       'es': 'Historial',
       'en': 'History',
@@ -233,6 +237,14 @@ class AppLocalizations {
       'es': 'Cancelar',
       'en': 'Cancel',
     },
+    'common.delete': {
+      'es': 'Eliminar',
+      'en': 'Delete',
+    },
+    'common.retry': {
+      'es': 'Reintentar',
+      'en': 'Retry',
+    },
     'common.schedule': {
       'es': 'Programar',
       'en': 'Schedule',
@@ -288,6 +300,50 @@ class AppLocalizations {
     'map.default.hotspot.camino_ie': {
       'es': 'Camino IE',
       'en': 'IE Path',
+    },
+    'zones.title': {
+      'es': 'Zonas personalizadas',
+      'en': 'Custom zones',
+    },
+    'zones.empty.title': {
+      'es': 'Sin zonas guardadas',
+      'en': 'No zones saved',
+    },
+    'zones.empty.subtitle': {
+      'es': 'Crea una zona manteniendo pulsado sobre el mapa para verla aquí.',
+      'en': 'Create a zone with a long press on the map to see it here.',
+    },
+    'zones.item.type': {
+      'es': 'Tipo: {type}',
+      'en': 'Type: {type}',
+    },
+    'zones.item.radius': {
+      'es': 'Radio: {meters} m',
+      'en': 'Radius: {meters} m',
+    },
+    'zones.item.coordinates': {
+      'es': 'Lat: {lat}, Lng: {lng}',
+      'en': 'Lat: {lat}, Lng: {lng}',
+    },
+    'zones.delete.confirm.title': {
+      'es': 'Eliminar zona',
+      'en': 'Delete zone',
+    },
+    'zones.delete.confirm.message': {
+      'es': '¿Quieres eliminar la zona "{name}"?',
+      'en': 'Do you want to delete the "{name}" zone?',
+    },
+    'zones.delete.success': {
+      'es': 'Zona eliminada',
+      'en': 'Zone deleted',
+    },
+    'zones.delete.error': {
+      'es': 'No se pudo eliminar la zona: {error}',
+      'en': 'Could not delete the zone: {error}',
+    },
+    'zones.load.error': {
+      'es': 'No se pudieron cargar las zonas: {error}',
+      'en': 'Could not load zones: {error}',
     },
     'sensor.title': {
       'es': 'Prueba de Sensores',

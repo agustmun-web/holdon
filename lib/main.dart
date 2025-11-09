@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'background/geofence_background_task.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/map_screen.dart';
 import 'screens/security_screen.dart';
+import 'screens/custom_zones_screen.dart';
 import 'services/optimized_geofence_service.dart';
 import 'state/app_state.dart';
 
@@ -67,16 +69,25 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   final OptimizedGeofenceService _optimizedGeofenceService = OptimizedGeofenceService();
+  final ValueNotifier<int> _zoneRevision = ValueNotifier<int>(0);
 
-  final List<Widget> _screens = [
-    const SecurityScreen(),
-    const MapScreen(),
-  ];
+  late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+    _screens = [
+      const SecurityScreen(),
+      MapScreen(zoneRevision: _zoneRevision),
+      CustomZonesScreen(zoneRevision: _zoneRevision),
+    ];
     _initializeOptimizedGeofenceService();
+  }
+
+  @override
+  void dispose() {
+    _zoneRevision.dispose();
+    super.dispose();
   }
 
   /// Inicializa el servicio de geofencing optimizado
@@ -144,6 +155,10 @@ class _MainScreenState extends State<MainScreen> {
             BottomNavigationBarItem(
               icon: const Icon(Icons.map),
               label: l10n.translate('tab.map'),
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.layers),
+              label: l10n.translate('tab.zones'),
             ),
           ],
         ),
