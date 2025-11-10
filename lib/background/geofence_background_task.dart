@@ -10,6 +10,11 @@ import '../services/geofence_service.dart';
 Future<void> geofenceBackgroundTask(GeofenceRegion region, GeofenceStatus status, Location location) async {
   debugPrint('🔄 [BACKGROUND] Evento de geofencing procesado: ${region.id} - $status');
   
+  if (GeofenceService.notificationsSuppressed) {
+    debugPrint('🔇 [BACKGROUND] Evento suprimido temporalmente: ${region.id}');
+    return;
+  }
+
   // Solo procesar eventos de ENTRADA
   if (status == GeofenceStatus.enter) {
     debugPrint('🚨 [BACKGROUND] Usuario entró a zona peligrosa: ${region.id}');

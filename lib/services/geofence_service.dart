@@ -23,6 +23,9 @@ class GeofenceService {
   List<CustomZone> _customZones = <CustomZone>[];
 
   static const String _customRegionPrefix = 'custom_zone_';
+  static bool _notificationsSuppressed = false;
+  static DateTime? _suppressedUntil;
+  static Timer? _suppressionTimer;
 
   // Definición de los 5 Hotspots específicos
   static const List<GeofenceHotspot> hotspots = [
@@ -268,6 +271,12 @@ class GeofenceService {
     GeofenceStatus status,
     Location location,
   ) async {
+    if (notificationsSuppressed) {
+      debugPrint(
+        '🔇 Evento de geofencing suprimido temporalmente: ${region.id}',
+      );
+      return;
+    }
     debugPrint('🚨 Evento de geofencing detectado: ${region.id} - $status');
 
     final GeofenceService service = GeofenceService();
@@ -536,9 +545,35 @@ class GeofenceService {
   }
 
   void updateCustomZones(List<CustomZone> zones) {
+    suppressNotifications(const Duration(seconds: 15));
     _customZones = List<CustomZone>.unmodifiable(zones);
     debugPrint('📦 Zonas personalizadas cargadas: ${_customZones.length}');
     _reconfigureGeofencingRegions();
+  }
+
+  static void suppressNotifications(
+      [Duration duration = const Duration(seconds: 3)]) {
+    _notificationsSuppressed = true;
+    _suppressedUntil = DateTime.now().add(duration);
+    _suppressionTimer?.cancel();
+    _suppressionTimer = Timer(duration, () {
+      if (_suppressedUntil == null ||
+          DateTime.now().isAfter(_suppressedUntil!)) {
+        _notificationsSuppressed = false;
+        _suppressedUntil = null;
+      }
+    });
+  }
+
+  static bool get notificationsSuppressed {
+    if (!_notificationsSuppressed) return false;
+    if (_suppressedUntil == null) return true;
+    if (DateTime.now().isAfter(_suppressedUntil!)) {
+      _notificationsSuppressed = false;
+      _suppressedUntil = null;
+      return false;
+    }
+    return true;
   }
 
   List<CustomZone> get customZones => List<CustomZone>.unmodifiable(_customZones);

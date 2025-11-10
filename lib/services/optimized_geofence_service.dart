@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'location_service.dart';
 import '../models/geofence_hotspot.dart';
 import '../models/custom_zone.dart';
+import 'geofence_service.dart' as base_geofence;
 
 /// Servicio de geofencing optimizado para Android con máxima precisión
 /// y detección dual (nativa + manual)
@@ -339,7 +340,8 @@ class OptimizedGeofenceService {
       debugPrint(
         '🎯 [MANUAL] ENTRADA detectada en $name (${distance.toStringAsFixed(1)}m)',
       );
-      if (_shouldSendNotification(regionId)) {
+      if (!base_geofence.GeofenceService.notificationsSuppressed &&
+          _shouldSendNotification(regionId)) {
         await onEnter();
         _markHotspotAsNotified(regionId);
       }
@@ -389,6 +391,12 @@ class OptimizedGeofenceService {
     GeofenceStatus status,
     Location location,
   ) async {
+    if (base_geofence.GeofenceService.notificationsSuppressed) {
+      debugPrint(
+        '🔇 [NATIVO] Evento suprimido temporalmente: ${region.id}',
+      );
+      return;
+    }
     debugPrint('🎯 [NATIVO] Evento de geofencing: ${region.id} - $status');
 
     final instance = OptimizedGeofenceService();
@@ -554,14 +562,16 @@ class OptimizedGeofenceService {
   }
 
   Set<GeofenceRegion> _buildGeofenceRegions() {
-    final Set<GeofenceRegion> regions = hotspots.map((GeofenceHotspot hotspot) {
-      return GeofenceRegion.circular(
-        id: hotspot.id,
-        center: LatLng(hotspot.latitude, hotspot.longitude),
-        radius: hotspot.radius,
-        data: hotspot.activity,
-      );
-    }).toSet();
+    final Set<GeofenceRegion> regions = hotspots
+        .map(
+          (GeofenceHotspot hotspot) => GeofenceRegion.circular(
+            id: hotspot.id,
+            center: LatLng(hotspot.latitude, hotspot.longitude),
+            radius: hotspot.radius,
+            data: hotspot.activity,
+          ),
+        )
+        .toSet();
 
     for (final CustomZone zone in _customZones) {
       if (zone.id == null) continue;
@@ -605,6 +615,9 @@ class OptimizedGeofenceService {
   }
 
   void updateCustomZones(List<CustomZone> zones) {
+    base_geofence.GeofenceService.suppressNotifications(
+      const Duration(seconds: 15),
+    );
     _customZones = List<CustomZone>.unmodifiable(zones);
     debugPrint('📦 [Optimized] Zonas personalizadas cargadas: ${_customZones.length}');
     _reconfigureGeofencingRegions();
