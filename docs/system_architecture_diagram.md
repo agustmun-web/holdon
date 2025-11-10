@@ -24,7 +24,6 @@ Layers of Prevention and Defence
 4. **Flutter Service Layer**
    - `SecurityService` orchestrates activation, deactivation, and alarm callbacks.
    - `AntiTheftManager` maintains subscriptions to native streams, pushes configuration updates (grace timer) and forwards alarms to the UI.
-   - `CustomZoneDatabase` and `CustomZoneEvents` manage geofencing zones in tandem with optimized monitoring services.
 
 5. **Application State & Configuration Layer**
    - `AppState` propagates localization and high-level app settings.
@@ -34,7 +33,6 @@ Layers of Prevention and Defence
 6. **UI & Interaction Layer**
    - `MapScreen` renders hotspots and custom zones, enabling long-press creation with localized forms.
    - `SecurityScreen` provides activation toggles, alarm status, and quick access to restart or lock controls.
-   - `CustomZonesScreen` lists user-defined geofences, syncing changes through database events and geofencing services.
 
 Hardware Integration Touchpoints
 --------------------------------

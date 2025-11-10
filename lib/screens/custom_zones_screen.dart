@@ -1,14 +1,8 @@
-import 'dart:async';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/custom_zone.dart';
-import '../services/custom_zone_database.dart';
-import '../services/custom_zone_events.dart';
-import '../services/geofence_service.dart';
-import '../services/optimized_geofence_service.dart';
+import '../services/custom_zone_service.dart';
 
 class CustomZonesScreen extends StatefulWidget {
   const CustomZonesScreen({super.key});
@@ -18,322 +12,384 @@ class CustomZonesScreen extends StatefulWidget {
 }
 
 class _CustomZonesScreenState extends State<CustomZonesScreen> {
-  final CustomZoneDatabase _zoneDatabase = CustomZoneDatabase.instance;
-  final GeofenceService _geofenceService = GeofenceService();
-  final OptimizedGeofenceService _optimizedGeofenceService = OptimizedGeofenceService();
-
-  List<CustomZone> _zones = <CustomZone>[];
-  bool _isLoading = true;
-  String? _errorMessage;
-  int? _deletingZoneId;
-  bool _reloadScheduled = false;
-  late final StreamSubscription<void> _zoneSubscription;
+  final CustomZoneService _zoneService = CustomZoneService.instance;
+  late final ValueNotifier<List<CustomZone>> _zonesNotifier;
 
   @override
   void initState() {
     super.initState();
-    _zoneSubscription = CustomZoneEvents.instance.stream.listen((_) {
-      if (mounted) {
-        _scheduleReload();
-      }
-    });
-    _loadZones();
-  }
-
-  @override
-  void dispose() {
-    _zoneSubscription.cancel();
-    super.dispose();
-  }
-
-  Future<void> _loadZones({bool showLoader = true, bool forceRefresh = false}) async {
-    if (showLoader) {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
-    }
-
-    try {
-      final List<CustomZone> zones = await _zoneDatabase.getZones(forceRefresh: forceRefresh);
-      if (!mounted) return;
-      setState(() {
-        _zones = List<CustomZone>.from(zones);
-        _isLoading = false;
-        _errorMessage = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _scheduleReload() {
-    if (!mounted || _reloadScheduled) return;
-    _reloadScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _reloadScheduled = false;
-      if (mounted) {
-        _loadZones(showLoader: false, forceRefresh: true);
-      }
-    });
-  }
-
-  Future<void> _onRefresh() async {
-    await _loadZones(forceRefresh: true);
-  }
-
-  Future<void> _confirmDelete(CustomZone zone) async {
-    if (zone.id == null) {
-      return;
-    }
-    final l10n = context.l10n;
-    final bool confirmed = await showDialog<bool>(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: Text(l10n.translate('zones.delete.confirm.title')),
-              content: Text(
-                l10n.translate(
-                  'zones.delete.confirm.message',
-                  params: {'name': zone.name},
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: Text(l10n.translate('common.cancel')),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF5B5B),
-                  ),
-                  child: Text(l10n.translate('common.delete')),
-                ),
-              ],
-            );
-          },
-        ) ??
-        false;
-
-    if (!confirmed || !mounted) {
-      return;
-    }
-
-    setState(() {
-      _deletingZoneId = zone.id;
-    });
-
-    bool deleted = false;
-    try {
-      await _zoneDatabase.deleteZone(zone.id!);
-      deleted = true;
-      _scheduleReload();
-      final List<CustomZone> zones = await _zoneDatabase.getZones(forceRefresh: true);
-      await Future.wait([
-        _geofenceService.syncCustomZones(zones),
-        _optimizedGeofenceService.syncCustomZones(zones),
-      ]);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.translate('zones.delete.success'))),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            l10n.translate(
-              'zones.delete.error',
-              params: {'error': e.toString()},
-            ),
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _deletingZoneId = null;
-        });
-      }
-      if (deleted) {
-        _scheduleReload();
-      }
-    }
+    _zonesNotifier = _zoneService.zonesNotifier;
+    _zoneService.ensureInitialized();
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(l10n.translate('zones.title')),
-        backgroundColor: const Color(0xFF061414),
-        actions: [
-          IconButton(
-            onPressed: _isLoading ? null : () => _loadZones(forceRefresh: true),
-            icon: const Icon(Icons.refresh),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        title: Text(
+          l10n.translate('customZones.title'),
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 20,
           ),
-        ],
+        ),
       ),
-      body: _buildBody(l10n),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF0E1720),
+              Color(0xFF0B131C),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: ValueListenableBuilder<List<CustomZone>>(
+            valueListenable: _zonesNotifier,
+            builder: (context, zones, _) {
+              if (zones.isEmpty) {
+                return _EmptyState(message: l10n.translate('customZones.empty'));
+              }
+
+              return ListView.builder(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                itemCount: zones.length,
+                itemBuilder: (context, index) {
+                  final zone = zones[index];
+                  return _CustomZoneCard(
+                    zone: zone,
+                    onDelete: () => _confirmDeleteZone(zone),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildBody(AppLocalizations l10n) {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
+  Future<void> _confirmDeleteZone(CustomZone zone) async {
+    final l10n = context.l10n;
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            l10n.translate(
+              'customZones.delete.title',
+              params: {'name': zone.name},
+            ),
+          ),
+          content: Text(l10n.translate('customZones.delete.message')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.translate('common.cancel')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(
+                l10n.translate('customZones.delete.confirm'),
+                style: const TextStyle(color: Color(0xFFFF5B5B)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
 
-    if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.warning_amber_outlined,
-                color: Color(0xFFFFC107),
-                size: 64,
+    if (confirmed == true) {
+      await _zoneService.deleteZone(zone.id!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n.translate(
+                'customZones.delete.success',
+                params: {'name': zone.name},
               ),
-              const SizedBox(height: 16),
-              Text(
-                l10n.translate(
-                  'zones.load.error',
-                  params: {'error': _errorMessage ?? ''},
+            ),
+          ),
+        );
+      }
+    }
+  }
+}
+
+class _CustomZoneCard extends StatelessWidget {
+  const _CustomZoneCard({
+    required this.zone,
+    required this.onDelete,
+  });
+
+  final CustomZone zone;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final Map<String, String> typeLabels = {
+      'gym': l10n.translate('map.customZone.type.gym'),
+      'home': l10n.translate('map.customZone.type.home'),
+      'work': l10n.translate('map.customZone.type.work'),
+      'other': l10n.translate('map.customZone.type.other'),
+    };
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.08),
+            Colors.white.withOpacity(0.02),
+          ],
+        ),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.08),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ZoneTypeBadge(zone: zone),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        zone.name,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        l10n.translate(
+                          'customZones.info.type',
+                        ),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.5),
+                        ),
+                      ),
+                      Text(
+                        typeLabels[zone.zoneType] ?? zone.zoneType,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  color: const Color(0xFFFF5B5B),
+                  onPressed: onDelete,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: () => _loadZones(forceRefresh: true),
-                child: Text(l10n.translate('common.retry')),
+              child: Column(
+                children: [
+                  _InfoRow(
+                    icon: Icons.straighten,
+                    label: l10n.translate('customZones.info.radius'),
+                    value: l10n.translate(
+                      'map.customZone.info.radius',
+                      params: {'meters': zone.radius.toStringAsFixed(0)},
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _InfoRow(
+                    icon: Icons.location_pin,
+                    label: l10n.translate('customZones.info.coordinates'),
+                    value:
+                        '${zone.latitude.toStringAsFixed(5)}, ${zone.longitude.toStringAsFixed(5)}',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: Colors.white.withOpacity(0.6)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white.withOpacity(0.5),
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
               ),
             ],
           ),
         ),
-      );
-    }
+      ],
+    );
+  }
+}
 
-    if (_zones.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _onRefresh,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
-          children: [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.place_outlined,
-                  color: Color(0xFF38B05F),
-                  size: 72,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  l10n.translate('zones.empty.title'),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.translate('zones.empty.subtitle'),
-                  style: const TextStyle(color: Colors.white70),
-                  textAlign: TextAlign.center,
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF34A853),
+                  Color(0xFF21C55E),
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF34A853).withOpacity(0.45),
+                  blurRadius: 20,
+                  offset: const Offset(0, 12),
                 ),
               ],
             ),
+            child: const Icon(
+              Icons.layers_clear,
+              size: 52,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: Colors.white,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ZoneTypeBadge extends StatelessWidget {
+  const _ZoneTypeBadge({required this.zone});
+
+  final CustomZone zone;
+
+  @override
+  Widget build(BuildContext context) {
+    final Map<String, Color> colors = {
+      'gym': const Color(0xFF2563EB),
+      'home': const Color(0xFF22C55E),
+      'work': const Color(0xFFF97316),
+      'other': const Color(0xFF6B7280),
+    };
+    final Color baseColor =
+        colors[zone.zoneType] ?? colors['other'] ?? Colors.white;
+
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            baseColor.withOpacity(0.8),
+            baseColor,
           ],
         ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _onRefresh,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        itemCount: _zones.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (BuildContext context, int index) {
-          final CustomZone zone = _zones[index];
-          final bool isDeleting = _deletingZoneId == zone.id;
-          return Card(
-            color: const Color(0xFF0E1B1B),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: Colors.white.withValues(alpha: 0.05),
-              ),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              title: Text(
-                zone.name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      l10n.translate('zones.item.type', params: {'type': zone.zoneType}),
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                    Text(
-                      l10n.translate(
-                        'zones.item.radius',
-                        params: {'meters': zone.radius.toStringAsFixed(0)},
-                      ),
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                    Text(
-                      l10n.translate(
-                        'zones.item.coordinates',
-                        params: {
-                          'lat': zone.latitude.toStringAsFixed(5),
-                          'lng': zone.longitude.toStringAsFixed(5),
-                        },
-                      ),
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ),
-              trailing: isDeleting
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      color: const Color(0xFFFF5B5B),
-                      tooltip: l10n.translate('common.delete'),
-                      onPressed: () => _confirmDelete(zone),
-                    ),
-            ),
-          );
-        },
+        boxShadow: [
+          BoxShadow(
+            color: baseColor.withOpacity(0.45),
+            blurRadius: 10,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: const Icon(
+        Icons.layers,
+        color: Colors.white,
+        size: 24,
       ),
     );
   }

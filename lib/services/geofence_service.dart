@@ -14,16 +14,15 @@ class GeofenceService {
   factory GeofenceService() => _instance;
   GeofenceService._internal();
 
-  final FlutterLocalNotificationsPlugin _localNotifications = 
+  final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
-  
+
   bool _isInitialized = false;
   bool _isMonitoring = false;
   bool _geofenceListenerRegistered = false;
+  List<CustomZone> _customZones = <CustomZone>[];
 
-  final List<CustomZone> _customZones = <CustomZone>[];
-
-  static const String _customGeofencePrefix = 'custom_zone_';
+  static const String _customRegionPrefix = 'custom_zone_';
 
   // Definición de los 5 Hotspots específicos
   static const List<GeofenceHotspot> hotspots = [
@@ -37,7 +36,7 @@ class GeofenceService {
       activity: 'ALTA',
       color: '#ff2100',
     ),
-    
+
     // Claret (ALTA)
     GeofenceHotspot(
       id: 'claret',
@@ -48,7 +47,7 @@ class GeofenceService {
       activity: 'ALTA',
       color: '#ff2100',
     ),
-    
+
     // Chamartín (ALTA)
     GeofenceHotspot(
       id: 'chamartin',
@@ -59,7 +58,7 @@ class GeofenceService {
       activity: 'ALTA',
       color: '#ff2100',
     ),
-    
+
     // Hermanitas de los pobres (MODERADA)
     GeofenceHotspot(
       id: 'hermanitas_pobres',
@@ -70,7 +69,7 @@ class GeofenceService {
       activity: 'MODERADA',
       color: '#ffc700',
     ),
-    
+
     // Camino IE (MODERADA)
     GeofenceHotspot(
       id: 'camino_ie',
@@ -90,10 +89,10 @@ class GeofenceService {
     try {
       // Inicializar notificaciones locales
       await _initializeNotifications();
-      
+
       // Solicitar permisos necesarios
       await _requestPermissions();
-      
+
       _isInitialized = true;
       debugPrint('✅ GeofenceService inicializado correctamente');
       return true;
@@ -105,26 +104,26 @@ class GeofenceService {
 
   /// Inicializa las notificaciones locales
   Future<void> _initializeNotifications() async {
-    const AndroidInitializationSettings androidSettings = 
+    const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    
-    const DarwinInitializationSettings iosSettings = 
+
+    const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings(
           requestAlertPermission: true,
           requestBadgePermission: true,
           requestSoundPermission: true,
         );
-    
+
     const InitializationSettings settings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
     );
-    
+
     await _localNotifications.initialize(
       settings,
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
-    
+
     debugPrint('🔔 Notificaciones locales inicializadas');
   }
 
@@ -132,40 +131,39 @@ class GeofenceService {
   Future<void> _requestPermissions() async {
     try {
       debugPrint('🔐 Solicitando permisos de ubicación...');
-      
+
       // Solicitar permiso de ubicación cuando la app está en uso primero
       var locationWhenInUse = await Permission.locationWhenInUse.request();
       debugPrint('📍 Permiso locationWhenInUse: $locationWhenInUse');
-      
+
       if (locationWhenInUse.isGranted) {
         // Solo solicitar ubicación en segundo plano si el permiso básico está otorgado
         var locationAlways = await Permission.locationAlways.request();
         debugPrint('📍 Permiso locationAlways: $locationAlways');
-        
+
         if (locationAlways.isDenied || locationAlways.isPermanentlyDenied) {
           debugPrint('⚠️ Permiso de ubicación en segundo plano no otorgado');
           debugPrint('⚠️ El geofencing puede no funcionar con la app cerrada');
         }
       }
-      
+
       // Solicitar permisos de notificaciones
       var notification = await Permission.notification.request();
       debugPrint('🔔 Permiso notification: $notification');
-      
+
       // Verificar permisos críticos
       final locationAlwaysStatus = await Permission.locationAlways.status;
       final notificationStatus = await Permission.notification.status;
-      
+
       debugPrint('🔍 Estado final de permisos:');
       debugPrint('   - Ubicación siempre: $locationAlwaysStatus');
       debugPrint('   - Notificaciones: $notificationStatus');
-      
+
       if (locationAlwaysStatus.isGranted && notificationStatus.isGranted) {
         debugPrint('✅ Todos los permisos críticos otorgados');
       } else {
         debugPrint('⚠️ Algunos permisos críticos no están otorgados');
       }
-      
     } catch (e) {
       debugPrint('❌ Error al solicitar permisos: $e');
     }
@@ -175,21 +173,21 @@ class GeofenceService {
   Future<bool> _checkRequiredPermissions() async {
     final locationAlwaysStatus = await Permission.locationAlways.status;
     final notificationStatus = await Permission.notification.status;
-    
+
     debugPrint('🔍 Verificando permisos críticos:');
     debugPrint('   - Ubicación siempre: $locationAlwaysStatus');
     debugPrint('   - Notificaciones: $notificationStatus');
-    
+
     if (!locationAlwaysStatus.isGranted) {
       debugPrint('❌ Permiso de ubicación en segundo plano no otorgado');
       return false;
     }
-    
+
     if (!notificationStatus.isGranted) {
       debugPrint('❌ Permiso de notificaciones no otorgado');
       return false;
     }
-    
+
     debugPrint('✅ Todos los permisos críticos están otorgados');
     return true;
   }
@@ -227,19 +225,23 @@ class GeofenceService {
 
       // Configurar el callback para eventos de geofencing
       if (!_geofenceListenerRegistered) {
-        Geofencing.instance.addGeofenceStatusChangedListener(_onGeofenceStatusChanged);
+        Geofencing.instance.addGeofenceStatusChangedListener(
+          _onGeofenceStatusChanged,
+        );
         _geofenceListenerRegistered = true;
       }
 
       // Iniciar el monitoreo
       await Geofencing.instance.start(regions: regions);
-      
+
       _isMonitoring = true;
-      debugPrint('🚨 Monitoreo de zonas iniciado - ${regions.length} zonas activas');
-      
+      debugPrint(
+        '🚨 Monitoreo de zonas iniciado - ${regions.length} zonas activas',
+      );
+
       // Mostrar notificación de confirmación
       await _showStartupNotification();
-      
+
       return true;
     } catch (e) {
       debugPrint('❌ Error al iniciar monitoreo: $e');
@@ -262,12 +264,12 @@ class GeofenceService {
 
   /// Callback que se ejecuta cuando cambia el estado de un geofence
   static Future<void> _onGeofenceStatusChanged(
-    GeofenceRegion region, 
-    GeofenceStatus status, 
-    Location location
+    GeofenceRegion region,
+    GeofenceStatus status,
+    Location location,
   ) async {
     debugPrint('🚨 Evento de geofencing detectado: ${region.id} - $status');
-    
+
     final GeofenceService service = GeofenceService();
 
     // Solo procesar eventos de ENTRADA
@@ -286,15 +288,20 @@ class GeofenceService {
 
       final CustomZone? customZone = service._findCustomZone(region.id);
       if (customZone != null) {
-        await service._showCustomZoneNotification(customZone);
+        debugPrint(
+          '🟦 Entrada en zona personalizada: ${customZone.name} (${customZone.zoneType})',
+        );
+        return;
       }
     }
   }
 
   /// Muestra la notificación para zonas de ALTA peligrosidad
-  static Future<void> _showHighDangerZoneNotification(GeofenceHotspot hotspot) async {
+  static Future<void> _showHighDangerZoneNotification(
+    GeofenceHotspot hotspot,
+  ) async {
     debugPrint('🔴 Mostrando notificación ALTA para hotspot: ${hotspot.id}');
-    
+
     final GeofenceService instance = GeofenceService();
     await instance._localNotifications.show(
       hotspot.id.hashCode, // ID único para cada hotspot
@@ -304,7 +311,8 @@ class GeofenceService {
         android: AndroidNotificationDetails(
           'high_danger_alerts',
           'Alertas de Alta Peligrosidad',
-          channelDescription: 'Notificaciones de alerta para zonas de alta peligrosidad',
+          channelDescription:
+              'Notificaciones de alerta para zonas de alta peligrosidad',
           importance: Importance.max,
           priority: Priority.max,
           category: AndroidNotificationCategory.alarm,
@@ -329,9 +337,13 @@ class GeofenceService {
   }
 
   /// Muestra la notificación para zonas de MODERADA peligrosidad
-  static Future<void> _showModerateDangerZoneNotification(GeofenceHotspot hotspot) async {
-    debugPrint('🟡 Mostrando notificación MODERADA para hotspot: ${hotspot.id}');
-    
+  static Future<void> _showModerateDangerZoneNotification(
+    GeofenceHotspot hotspot,
+  ) async {
+    debugPrint(
+      '🟡 Mostrando notificación MODERADA para hotspot: ${hotspot.id}',
+    );
+
     final GeofenceService instance = GeofenceService();
     await instance._localNotifications.show(
       hotspot.id.hashCode, // ID único para cada hotspot
@@ -341,7 +353,8 @@ class GeofenceService {
         android: AndroidNotificationDetails(
           'moderate_danger_alerts',
           'Alertas de Peligrosidad Moderada',
-          channelDescription: 'Notificaciones de alerta para zonas de peligrosidad moderada',
+          channelDescription:
+              'Notificaciones de alerta para zonas de peligrosidad moderada',
           importance: Importance.high,
           priority: Priority.high,
           category: AndroidNotificationCategory.status,
@@ -369,7 +382,7 @@ class GeofenceService {
     await _localNotifications.show(
       'startup'.hashCode,
       '🔒 HoldOn - Protección Activa',
-      'Monitoreo de zonas activo. ${hotspots.length + _customZones.length} zonas vigiladas.',
+      'Monitoreo de zonas activo. ${hotspots.length} zonas vigiladas.',
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'system_status',
@@ -391,7 +404,7 @@ class GeofenceService {
   /// Callback cuando se toca una notificación
   void _onNotificationTapped(NotificationResponse response) {
     debugPrint('📱 Notificación tocada: ${response.payload}');
-    
+
     if (response.payload != null) {
       if (response.payload!.startsWith('high_danger_alert:')) {
         debugPrint('🔴 Usuario tocó alerta de alta peligrosidad');
@@ -414,31 +427,6 @@ class GeofenceService {
 
   /// Verifica si el servicio está inicializado
   bool get isInitialized => _isInitialized;
-
-  /// Sincroniza la lista de zonas personalizadas vigiladas
-  Future<void> syncCustomZones(List<CustomZone> zones) async {
-    _customZones
-      ..clear()
-      ..addAll(zones.where((zone) => zone.id != null));
-    await _reconfigureGeofencingRegions();
-  }
-
-  /// Registra una nueva zona personalizada y la añade al monitoreo activo
-  Future<void> registerCustomZone(CustomZone zone) async {
-    if (zone.id == null) {
-      debugPrint('⚠️ Intento de registrar zona sin ID, se ignora.');
-      return;
-    }
-
-    final index = _customZones.indexWhere((existing) => existing.id == zone.id);
-    if (index != -1) {
-      _customZones[index] = zone;
-    } else {
-      _customZones.add(zone);
-    }
-
-    await _reconfigureGeofencingRegions();
-  }
 
   /// Verifica si el usuario está dentro de algún hotspot y retorna el nivel de actividad
   Future<String?> getUserHotspotActivity() async {
@@ -464,7 +452,9 @@ class GeofenceService {
         );
 
         if (distance <= hotspot.radius) {
-          debugPrint('📍 Usuario dentro del hotspot: ${hotspot.id} (${hotspot.activity}) - distancia: ${distance.toStringAsFixed(1)}m');
+          debugPrint(
+            '📍 Usuario dentro del hotspot: ${hotspot.id} (${hotspot.activity}) - distancia: ${distance.toStringAsFixed(1)}m',
+          );
           return hotspot.activity; // Retornar ALTA o MODERADA
         }
       }
@@ -496,10 +486,9 @@ class GeofenceService {
 
     for (final CustomZone zone in _customZones) {
       if (zone.id == null) continue;
-      final regionId = '$_customGeofencePrefix${zone.id}';
       regions.add(
         GeofenceRegion.circular(
-          id: regionId,
+          id: '$_customRegionPrefix${zone.id}',
           center: LatLng(zone.latitude, zone.longitude),
           radius: zone.radius,
           data: zone.zoneType,
@@ -518,7 +507,9 @@ class GeofenceService {
       await Geofencing.instance.stop(keepsRegions: false);
       final regions = _buildGeofenceRegions();
       await Geofencing.instance.start(regions: regions);
-      debugPrint('🔄 Regiones de geofencing reconfiguradas (${regions.length}).');
+      debugPrint(
+        '🔄 Regiones de geofencing reconfiguradas (${regions.length}).',
+      );
     } catch (e) {
       debugPrint('❌ Error al reconfigurar regiones: $e');
     }
@@ -534,45 +525,23 @@ class GeofenceService {
   }
 
   CustomZone? _findCustomZone(String regionId) {
-    if (!regionId.startsWith(_customGeofencePrefix)) {
-      return null;
-    }
-    final idString = regionId.substring(_customGeofencePrefix.length);
-    final int? zoneId = int.tryParse(idString);
-    if (zoneId == null) {
-      return null;
-    }
+    if (!regionId.startsWith(_customRegionPrefix)) return null;
+    final idPart = regionId.replaceFirst(_customRegionPrefix, '');
+    final parsedId = int.tryParse(idPart);
+    if (parsedId == null) return null;
     for (final CustomZone zone in _customZones) {
-      if (zone.id == zoneId) {
-        return zone;
-      }
+      if (zone.id == parsedId) return zone;
     }
     return null;
   }
 
-  Future<void> _showCustomZoneNotification(CustomZone zone) async {
-    await _localNotifications.show(
-      ('$_customGeofencePrefix${zone.id}').hashCode,
-      'Entraste en tu zona ${zone.zoneType}',
-      zone.name,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'custom_zone_alerts',
-          'Zonas Personalizadas',
-          channelDescription: 'Alertas para zonas personalizadas del usuario',
-          importance: Importance.defaultImportance,
-          priority: Priority.defaultPriority,
-          icon: '@mipmap/ic_launcher',
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
-      ),
-      payload: 'custom_zone_alert:${zone.id}',
-    );
+  void updateCustomZones(List<CustomZone> zones) {
+    _customZones = List<CustomZone>.unmodifiable(zones);
+    debugPrint('📦 Zonas personalizadas cargadas: ${_customZones.length}');
+    _reconfigureGeofencingRegions();
   }
+
+  List<CustomZone> get customZones => List<CustomZone>.unmodifiable(_customZones);
 }
 
 /// Modelo para representar un hotspot de geofencing

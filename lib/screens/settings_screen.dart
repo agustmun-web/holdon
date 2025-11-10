@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../services/security_service.dart';
@@ -28,13 +30,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _selectedLocale ??= AppStateProvider.of(context).locale;
+    _selectedLocale ??= context.read<AppState>().locale;
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final appState = AppStateProvider.of(context);
+    final appState = context.watch<AppState>();
     return Scaffold(
       backgroundColor: const Color(0xFF0E1720),
       appBar: AppBar(
@@ -128,7 +130,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
@@ -256,10 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         subtitle: Text(
           subtitle,
-          style: const TextStyle(
-            color: Color(0xFF9AA0A6),
-            fontSize: 14,
-          ),
+          style: const TextStyle(color: Color(0xFF9AA0A6), fontSize: 14),
         ),
       ),
     );
@@ -283,10 +285,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(16),
       ),
       child: ListTile(
-        leading: const Icon(
-          Icons.language,
-          color: Color(0xFF34A853),
-        ),
+        leading: const Icon(Icons.language, color: Color(0xFF34A853)),
         title: Text(
           title,
           style: const TextStyle(
@@ -297,10 +296,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         subtitle: Text(
           subtitle,
-          style: const TextStyle(
-            color: Color(0xFF9AA0A6),
-            fontSize: 14,
-          ),
+          style: const TextStyle(color: Color(0xFF9AA0A6), fontSize: 14),
         ),
         trailing: DropdownButton<Locale>(
           value: value,
@@ -337,10 +333,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(16),
       ),
       child: ListTile(
-        leading: Icon(
-          icon,
-          color: const Color(0xFF34A853),
-        ),
+        leading: Icon(icon, color: const Color(0xFF34A853)),
         title: Text(
           title,
           style: const TextStyle(
@@ -351,18 +344,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         subtitle: Text(
           subtitle,
-          style: const TextStyle(
-            color: Color(0xFF9AA0A6),
-            fontSize: 14,
-          ),
+          style: const TextStyle(color: Color(0xFF9AA0A6), fontSize: 14),
         ),
-        trailing: const Icon(
-          Icons.chevron_right,
-          color: Colors.white54,
-        ),
+        trailing: const Icon(Icons.chevron_right, color: Colors.white54),
         onTap: onTap,
       ),
     );
   }
 }
-

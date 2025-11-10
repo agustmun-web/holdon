@@ -7,11 +7,9 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../l10n/app_localizations.dart';
-import '../services/geofence_service.dart';
 import '../models/custom_zone.dart';
-import '../services/custom_zone_database.dart';
-import '../services/custom_zone_events.dart';
-import '../services/optimized_geofence_service.dart';
+import '../services/custom_zone_service.dart';
+import '../services/geofence_service.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -27,31 +25,30 @@ class _MapScreenState extends State<MapScreen> {
   String? _errorKey;
   Map<String, String>? _errorParams;
   final Set<Marker> _markers = {};
-  final Set<Circle> _circles = {};
   final GeofenceService _geofenceService = GeofenceService();
-  final OptimizedGeofenceService _optimizedGeofenceService = OptimizedGeofenceService();
-  final CustomZoneDatabase _zoneDatabase = CustomZoneDatabase.instance;
-  late final StreamSubscription<void> _zoneSubscription;
-  List<CustomZone> _customZones = <CustomZone>[];
-  bool _zoneReloadScheduled = false;
+  final CustomZoneService _customZoneService = CustomZoneService.instance;
+  Set<Circle> _customCircles = <Circle>{};
+  late final VoidCallback _customZonesListener;
 
-  static const List<String> _zoneTypeKeys = <String>[
-    'zones.type.house',
-    'zones.type.work',
-    'zones.type.gym',
-    'zones.type.other',
-  ];
-  
   // Ubicación por defecto (Madrid, España)
   static const LatLng _defaultLocation = LatLng(40.4168, -3.7038);
+  static const List<String> _zoneTypeKeys = <String>[
+    'gym',
+    'home',
+    'work',
+    'other',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _zoneSubscription = CustomZoneEvents.instance.stream.listen((_) {
-      if (mounted) {
-        _scheduleZoneReload();
-      }
+    _customZonesListener = () {
+      _renderCustomZones(_customZoneService.zones);
+    };
+    _customZoneService.ensureInitialized().then((_) {
+      if (!mounted) return;
+      _renderCustomZones(_customZoneService.zones);
+      _customZoneService.zonesNotifier.addListener(_customZonesListener);
     });
     _initializeMap();
   }
@@ -63,7 +60,6 @@ class _MapScreenState extends State<MapScreen> {
     });
     try {
       await _getCurrentLocation();
-      await _loadCustomZones();
       if (!mounted) {
         return;
       }
@@ -110,7 +106,7 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _currentPosition = LatLng(position.latitude, position.longitude);
       });
-      
+
       // Centrar automáticamente en la ubicación del usuario
       if (_mapController != null && mounted) {
         _goToMyLocation();
@@ -124,7 +120,7 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-    
+
     // Centrar automáticamente en la ubicación del usuario al crear el mapa
     if (_currentPosition != null) {
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -140,13 +136,10 @@ class _MapScreenState extends State<MapScreen> {
       try {
         await _mapController!.animateCamera(
           CameraUpdate.newCameraPosition(
-            CameraPosition(
-              target: _currentPosition!,
-              zoom: 15.0,
-            ),
+            CameraPosition(target: _currentPosition!, zoom: 15.0),
           ),
         );
-        
+
         if (mounted) {
           HapticFeedback.lightImpact();
         }
@@ -161,15 +154,14 @@ class _MapScreenState extends State<MapScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final Set<Circle> circles = _buildHotspotCircles();
     return Scaffold(
       body: Stack(
         children: [
           // Mapa de Google Maps ocupando toda la pantalla
           if (_isLoading)
             const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF34A853),
-              ),
+              child: CircularProgressIndicator(color: Color(0xFF34A853)),
             )
           else if (_errorKey != null)
             Center(
@@ -183,10 +175,7 @@ class _MapScreenState extends State<MapScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    l10n.translate(
-                      _errorKey!,
-                      params: _errorParams,
-                    ),
+                    l10n.translate(_errorKey!, params: _errorParams),
                     style: const TextStyle(
                       color: Color(0xFF5F6368),
                       fontSize: 16,
@@ -219,9 +208,8 @@ class _MapScreenState extends State<MapScreen> {
                 zoom: 14.0,
               ),
               onMapCreated: _onMapCreated,
-              onLongPress: _onMapLongPress,
               markers: _markers,
-              circles: _circles,
+              circles: {...circles, ..._customCircles},
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
@@ -230,8 +218,9 @@ class _MapScreenState extends State<MapScreen> {
               compassEnabled: true,
               buildingsEnabled: true,
               trafficEnabled: false,
+              onLongPress: _handleMapLongPress,
             ),
-          
+
           // Botón flotante para centrar en mi ubicación
           if (!_isLoading && _errorKey == null)
             Positioned(
@@ -240,10 +229,7 @@ class _MapScreenState extends State<MapScreen> {
               child: FloatingActionButton(
                 onPressed: _goToMyLocation,
                 backgroundColor: const Color(0xFF34A853),
-                child: const Icon(
-                  Icons.my_location,
-                  color: Colors.white,
-                ),
+                child: const Icon(Icons.my_location, color: Colors.white),
               ),
             ),
         ],
@@ -251,55 +237,11 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Future<void> _loadCustomZones({bool forceRefresh = false}) async {
-    try {
-      final List<CustomZone> zones = List<CustomZone>.from(
-        await _zoneDatabase.getZones(forceRefresh: forceRefresh),
-      );
-      _applyCustomZones(zones);
-      try {
-        await Future.wait([
-          _geofenceService.syncCustomZones(zones),
-          _optimizedGeofenceService.syncCustomZones(zones),
-        ]);
-      } catch (e) {
-        debugPrint('❌ Error al sincronizar geofencing con zonas personalizadas: $e');
-      }
-    } catch (e) {
-      debugPrint('❌ Error al cargar zonas personalizadas: $e');
-      if (_customZones.isEmpty) {
-        _applyCustomZones(const <CustomZone>[]);
-      }
-    }
-  }
-
-  void _scheduleZoneReload() {
-    if (!mounted || _zoneReloadScheduled) return;
-    _zoneReloadScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _zoneReloadScheduled = false;
-      if (mounted) {
-        _loadCustomZones(forceRefresh: true);
-      }
-    });
-  }
-
-  void _applyCustomZones(List<CustomZone> zones) {
-    if (!mounted) return;
-    final Set<Circle> circles = _buildMapCircles(zones);
-    setState(() {
-      _customZones = zones;
-      _circles
-        ..clear()
-        ..addAll(circles);
-    });
-  }
-
-  Set<Circle> _buildMapCircles(List<CustomZone> customZones) {
+  Set<Circle> _buildHotspotCircles() {
     final Set<Circle> circles = <Circle>{};
 
     for (final hotspot in _geofenceService.hotspotsList) {
-      final Color circleColor = hotspot.activity == 'ALTA' 
+      final Color circleColor = hotspot.activity == 'ALTA'
           ? const Color(0xFFFF2100)
           : const Color(0xFFFFC700);
 
@@ -317,371 +259,390 @@ class _MapScreenState extends State<MapScreen> {
       );
     }
 
-    const Color customStrokeColor = Color(0xFF1E88E5);
-
-    for (final CustomZone zone in customZones) {
-      if (zone.id == null) continue;
-      circles.add(
-        Circle(
-          circleId: CircleId('custom_${zone.id}'),
-          center: LatLng(zone.latitude, zone.longitude),
-          radius: zone.radius,
-          fillColor: customStrokeColor.withValues(alpha: 0.18),
-          strokeColor: customStrokeColor,
-          strokeWidth: 2,
-        ),
-      );
-    }
-
     return circles;
   }
 
-  Future<void> _onMapLongPress(LatLng position) async {
-    HapticFeedback.mediumImpact();
-    final CustomZone? draftZone = await _showCreateZoneSheet(position);
-    if (draftZone == null) return;
-
-    try {
-      final CustomZone savedZone = await _zoneDatabase.insertZone(draftZone);
-
-      if (mounted) {
-        setState(() {
-          _customZones.removeWhere((zone) => zone.id == savedZone.id);
-          _customZones = <CustomZone>[savedZone, ..._customZones];
-          _circles
-            ..clear()
-            ..addAll(_buildMapCircles(_customZones));
-        });
-      }
-
-      bool registrationSuccessful = true;
-      try {
-        await Future.wait([
-          _geofenceService.registerCustomZone(savedZone),
-          _optimizedGeofenceService.registerCustomZone(savedZone),
-        ]);
-      } catch (e) {
-        registrationSuccessful = false;
-        debugPrint('❌ Error al registrar zona personalizada en geofencing: $e');
-      }
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            registrationSuccessful
-                ? 'Zona personalizada guardada'
-                : 'Zona guardada, pero no se pudo activar el geofencing de inmediato',
-          ),
-        ),
-      );
-
-    } catch (e) {
-      debugPrint('❌ Error al guardar zona personalizada: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo guardar la zona: $e')),
-      );
+  void _renderCustomZones(List<CustomZone> zones) {
+    final Set<Circle> customCircles = <Circle>{};
+    for (final CustomZone zone in zones) {
+      if (zone.id == null) continue;
+      customCircles.add(_createCustomCircle(zone));
+    }
+    if (mounted) {
+      setState(() {
+        _customCircles = customCircles;
+      });
+    } else {
+      _customCircles = customCircles;
     }
   }
 
-  Future<CustomZone?> _showCreateZoneSheet(LatLng position) async {
-    final TextEditingController nameController = TextEditingController();
-    double radius = 150;
-    String zoneTypeKey = _zoneTypeKeys.first;
-    String? nameError;
+  Circle _createCustomCircle(CustomZone zone) {
+    final Color circleColor = _colorForZoneType(zone.zoneType);
+    return Circle(
+      circleId: CircleId('custom_${zone.id}'),
+      center: LatLng(zone.latitude, zone.longitude),
+      radius: zone.radius,
+      fillColor: circleColor.withValues(alpha: 0.12),
+      strokeColor: circleColor,
+      strokeWidth: 2,
+      consumeTapEvents: true,
+      onTap: () => _showCustomZoneInfo(zone),
+    );
+  }
 
-    final CustomZone? createdZone = await showModalBottomSheet<CustomZone>(
+  Color _colorForZoneType(String zoneType) {
+    switch (zoneType) {
+      case 'gym':
+        return const Color(0xFF2563EB); // Azul
+      case 'home':
+        return const Color(0xFF22C55E); // Verde
+      case 'work':
+        return const Color(0xFFF97316); // Naranja
+      default:
+        return const Color(0xFF6B7280); // Gris
+    }
+  }
+
+  Color _colorForZoneTypeLight(String zoneType) {
+    final base = _colorForZoneType(zoneType);
+    return Color.lerp(base, Colors.white, 0.4) ?? base;
+  }
+
+  Widget _buildZoneTypeDot(String zoneType) {
+    return _ZoneTypeDot(
+      color: _colorForZoneType(zoneType),
+      secondary: _colorForZoneTypeLight(zoneType),
+    );
+  }
+
+  Future<void> _handleMapLongPress(LatLng position) async {
+    if (_isLoading || _errorKey != null) return;
+    final CustomZone? createdZone = await _showCreateZoneSheet(position);
+    if (createdZone != null && mounted) {
+      final l10n = context.l10n;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            l10n.translate(
+              'map.customZone.saved',
+              params: {'name': createdZone.name},
+            ),
+          ),
+        ),
+      );
+      _goToLocation(position);
+    }
+  }
+
+  Future<void> _goToLocation(LatLng target) async {
+    if (_mapController == null) return;
+    try {
+      await _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: target, zoom: 16.0),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error al mover cámara: $e');
+    }
+  }
+
+  Future<CustomZone?> _showCreateZoneSheet(LatLng position) {
+    final l10n = context.l10n;
+    final TextEditingController nameController = TextEditingController();
+    double radiusValue = 150;
+    String selectedType = _zoneTypeKeys.first;
+    String? errorText;
+    bool isSaving = false;
+
+    Map<String, String> _zoneTypeLabels(AppLocalizations loc) {
+      return {
+        'gym': loc.translate('map.customZone.type.gym'),
+        'home': loc.translate('map.customZone.type.home'),
+        'work': loc.translate('map.customZone.type.work'),
+        'other': loc.translate('map.customZone.type.other'),
+      };
+    }
+
+    return showModalBottomSheet<CustomZone>(
       context: context,
-      isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (BuildContext modalContext) {
-        return SafeArea(
-          top: false,
-          child: Padding(
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        final labels = _zoneTypeLabels(l10n);
+        return GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.decelerate,
             padding: EdgeInsets.only(
-              bottom: MediaQuery.of(modalContext).viewInsets.bottom + 24,
-              left: 24,
-              right: 24,
-              top: 24,
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
             ),
             child: StatefulBuilder(
-              builder: (BuildContext context, void Function(void Function()) setModalState) {
-                return SingleChildScrollView(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF101A1C).withValues(alpha: 0.98),
-                      borderRadius: BorderRadius.circular(28),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 40,
-                          offset: const Offset(0, 24),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 26),
+              builder: (context, setModalState) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF121E2C),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.4),
+                        blurRadius: 20,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Center(
                           child: Container(
-                            width: 44,
+                            width: 48,
                             height: 4,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
+                              color: Colors.white.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        Text(
+                          l10n.translate('map.customZone.title'),
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
                         const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF34C759).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: const Icon(
-                                Icons.location_on_rounded,
-                                color: Color(0xFF34C759),
-                                size: 26,
+                        TextField(
+                          controller: nameController,
+                          enabled: !isSaving,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: l10n.translate('map.customZone.nameLabel'),
+                            hintText: l10n.translate('map.customZone.nameHint'),
+                            errorText: errorText,
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.05),
+                            labelStyle: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                            hintStyle: TextStyle(
+                              color: Colors.white.withOpacity(0.4),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: Colors.white.withOpacity(0.15),
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    context.l10n.translate('zones.create.title'),
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    context.l10n.translate('zones.create.subtitle'),
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF34A853),
                               ),
                             ),
-                          ],
+                            errorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFFF5B5B),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          l10n.translate(
+                            'map.customZone.radiusLabel',
+                            params: {'meters': radiusValue.toStringAsFixed(0)},
+                          ),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white.withOpacity(0.85),
+                          ),
+                        ),
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: const Color(0xFF34A853),
+                            inactiveTrackColor:
+                                Colors.white.withOpacity(0.1),
+                            thumbColor: const Color(0xFF34A853),
+                            overlayColor:
+                                const Color(0xFF34A853).withOpacity(0.2),
+                            valueIndicatorColor: const Color(0xFF34A853),
+                          ),
+                          child: Slider(
+                            value: radiusValue,
+                            min: 50,
+                            max: 1000,
+                            divisions: 19,
+                            label: '${radiusValue.toStringAsFixed(0)} m',
+                            onChanged: isSaving
+                                ? null
+                                : (value) {
+                                    setModalState(() {
+                                      radiusValue = value;
+                                    });
+                                  },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          l10n.translate('map.customZone.typeLabel'),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white.withOpacity(0.85),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          value: selectedType,
+                          dropdownColor: const Color(0xFF121E2C),
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.05),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: Colors.white.withOpacity(0.15),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF34A853),
+                              ),
+                            ),
+                          ),
+                          items: _zoneTypeKeys
+                              .map(
+                                (key) => DropdownMenuItem<String>(
+                                  value: key,
+                                  child: Row(
+                                    children: [
+                                      _buildZoneTypeDot(key),
+                                      const SizedBox(width: 8),
+                                      Text(labels[key] ?? key),
+                                    ],
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: isSaving
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setModalState(() {
+                                    selectedType = value;
+                                  });
+                                },
                         ),
                         const SizedBox(height: 24),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          padding: const EdgeInsets.all(18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              TextField(
-                                controller: nameController,
-                                textCapitalization: TextCapitalization.words,
-                                style: const TextStyle(color: Colors.white),
-                                decoration: InputDecoration(
-                                  labelText: context.l10n.translate('zones.create.name'),
-                                  hintText: context.l10n.translate('zones.create.name.hint'),
-                                  errorText: nameError,
-                                  labelStyle: const TextStyle(color: Colors.white70),
-                                  hintStyle: const TextStyle(color: Colors.white38),
-                                  filled: true,
-                                  fillColor: Colors.white.withValues(alpha: 0.06),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    borderSide: BorderSide(
-                                      color: Colors.white.withValues(alpha: 0.08),
-                                    ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFF34C759),
-                                      width: 1.4,
-                                    ),
-                                  ),
-                                ),
-                                onChanged: (value) {
-                                  if (nameError != null && value.isNotEmpty) {
-                                    setModalState(() {
-                                      nameError = null;
-                                    });
-                                  }
-                                },
-                              ),
-                              const SizedBox(height: 18),
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.08),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      '${position.latitude.toStringAsFixed(5)}, '
-                                      '${position.longitude.toStringAsFixed(5)}',
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  const Icon(Icons.near_me, color: Colors.white54, size: 20),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 22),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          padding: const EdgeInsets.all(18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Radio de cobertura',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                context.l10n.translate(
-                                  'zones.create.radius.subtitle',
-                                  params: {'meters': radius.toStringAsFixed(0)},
-                                ),
-                                style: const TextStyle(
-                                  color: Color(0xFF34C759),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              SliderTheme(
-                                data: SliderTheme.of(context).copyWith(
-                                  activeTrackColor: const Color(0xFF34C759),
-                                  inactiveTrackColor: Colors.white.withValues(alpha: 0.12),
-                                  thumbColor: const Color(0xFF34C759),
-                                  overlayShape: SliderComponentShape.noOverlay,
-                                  trackHeight: 6,
-                                ),
-                                child: Slider(
-                                  value: radius,
-                                  min: 50,
-                                  max: 1000,
-                                  divisions: 19,
-                                  label: '${radius.toStringAsFixed(0)} m',
-                                  onChanged: (double value) {
-                                    setModalState(() {
-                                      radius = value;
-                                    });
-                                  },
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.04),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: DropdownButtonFormField<String>(
-                                  value: zoneTypeKey,
-                                  dropdownColor: const Color(0xFF142022),
-                                  decoration: InputDecoration(
-                                    labelText: context.l10n.translate('zones.create.type'),
-                                    labelStyle: const TextStyle(color: Colors.white70),
-                                    border: InputBorder.none,
-                                  ),
-                                  items: _zoneTypeKeys
-                                      .map(
-                                        (String key) => DropdownMenuItem<String>(
-                                          value: key,
-                                          child: Row(
-                                            children: [
-                                              const Icon(Icons.check_circle_outline,
-                                                  size: 18, color: Colors.white54),
-                                              const SizedBox(width: 10),
-                                              Text(
-                                                context.l10n.translate(key),
-                                                style: const TextStyle(color: Colors.white),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (String? value) {
-                                    if (value == null) return;
-                                    setModalState(() {
-                                      zoneTypeKey = value;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 26),
                         Row(
                           children: [
                             Expanded(
-                              child: TextButton(
-                                onPressed: () => Navigator.of(modalContext).pop(),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.white70,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  side: BorderSide(
+                                    color: Colors.white.withOpacity(0.2),
+                                  ),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
                                 ),
-                                child: Text(context.l10n.translate('zones.create.cancel')),
+                                onPressed: isSaving
+                                    ? null
+                                    : () => Navigator.of(context).pop(),
+                                child: Text(l10n.translate('common.cancel')),
                               ),
                             ),
-                            const SizedBox(width: 14),
+                            const SizedBox(width: 12),
                             Expanded(
-                              child: FilledButton.icon(
-                                icon: const Icon(Icons.check_rounded),
-                                onPressed: () {
-                                  final String name = nameController.text.trim();
-                                  if (name.isEmpty) {
-                                    setModalState(() {
-                                      nameError =
-                                          context.l10n.translate('zones.create.name.error');
-                                    });
-                                    return;
-                                  }
-                                  Navigator.of(modalContext).pop(
-                                    CustomZone(
-                                      name: name,
-                                      latitude: position.latitude,
-                                      longitude: position.longitude,
-                                      radius: radius,
-                                      zoneType: context.l10n.translate(zoneTypeKey),
-                                    ),
-                                  );
-                                },
-                                style: FilledButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  backgroundColor: const Color(0xFF34C759),
-                                  foregroundColor: Colors.black,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF34A853),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
                                 ),
-                                label: Text(context.l10n.translate('zones.create.save')),
+                                onPressed: isSaving
+                                    ? null
+                                    : () async {
+                                        final name = nameController.text.trim();
+                                        if (name.isEmpty) {
+                                          setModalState(() {
+                                            errorText = l10n.translate(
+                                              'map.customZone.validation.name',
+                                            );
+                                          });
+                                          return;
+                                        }
+                                        setModalState(() {
+                                          isSaving = true;
+                                          errorText = null;
+                                        });
+                                        final CustomZone newZone = CustomZone(
+                                          name: name,
+                                          latitude: position.latitude,
+                                          longitude: position.longitude,
+                                          radius: radiusValue,
+                                          zoneType: selectedType,
+                                        );
+                                        try {
+                                          final savedZone =
+                                              await _customZoneService.addZone(
+                                            newZone,
+                                          );
+                                          if (context.mounted) {
+                                            Navigator.of(context)
+                                                .pop(savedZone);
+                                          }
+                                        } catch (e) {
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  l10n.translate(
+                                                    'map.customZone.error',
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                          setModalState(() {
+                                            isSaving = false;
+                                          });
+                                        }
+                                      },
+                                child: isSaving
+                                    ? const SizedBox(
+                                        height: 18,
+                                        width: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Text(
+                                        l10n.translate('map.customZone.save'),
+                                      ),
                               ),
                             ),
                           ],
@@ -696,9 +657,54 @@ class _MapScreenState extends State<MapScreen> {
         );
       },
     );
+  }
 
-    nameController.dispose();
-    return createdZone;
+  void _showCustomZoneInfo(CustomZone zone) {
+    final l10n = context.l10n;
+    final labels = {
+      'gym': l10n.translate('map.customZone.type.gym'),
+      'home': l10n.translate('map.customZone.type.home'),
+      'work': l10n.translate('map.customZone.type.work'),
+      'other': l10n.translate('map.customZone.type.other'),
+    };
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            l10n.translate(
+              'map.customZone.info.title',
+              params: {'name': zone.name},
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.translate(
+                  'map.customZone.info.type',
+                  params: {'type': labels[zone.zoneType] ?? zone.zoneType},
+                ),
+              ),
+              Text(
+                l10n.translate(
+                  'map.customZone.info.radius',
+                  params: {'meters': zone.radius.toStringAsFixed(0)},
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.translate('common.accept')),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   /// Muestra información del hotspot cuando se toca
@@ -713,8 +719,8 @@ class _MapScreenState extends State<MapScreen> {
             children: [
               Icon(
                 Icons.warning,
-                color: hotspot.activity == 'ALTA' 
-                    ? const Color(0xFFFF2100) 
+                color: hotspot.activity == 'ALTA'
+                    ? const Color(0xFFFF2100)
                     : const Color(0xFFFFC700),
               ),
               const SizedBox(width: 8),
@@ -749,23 +755,23 @@ class _MapScreenState extends State<MapScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: hotspot.activity == 'ALTA' 
+                  color: hotspot.activity == 'ALTA'
                       ? const Color(0xFFFF2100).withValues(alpha: 0.1)
                       : const Color(0xFFFFC700).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: hotspot.activity == 'ALTA' 
+                    color: hotspot.activity == 'ALTA'
                         ? const Color(0xFFFF2100)
                         : const Color(0xFFFFC700),
                     width: 1,
                   ),
                 ),
                 child: Text(
-                  hotspot.activity == 'ALTA' 
+                  hotspot.activity == 'ALTA'
                       ? l10n.translate('map.hotspot.alert.high')
                       : l10n.translate('map.hotspot.alert.medium'),
                   style: TextStyle(
-                    color: hotspot.activity == 'ALTA' 
+                    color: hotspot.activity == 'ALTA'
                         ? const Color(0xFFFF2100)
                         : const Color(0xFFFFC700),
                     fontWeight: FontWeight.w500,
@@ -808,13 +814,43 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
-    _zoneSubscription.cancel();
-    // Limpiar recursos del mapa para evitar warnings
     _mapController?.dispose();
     _mapController = null;
-    // Limpiar círculos y marcadores para liberar recursos
-    _circles.clear();
     _markers.clear();
+    _customZoneService.zonesNotifier.removeListener(_customZonesListener);
     super.dispose();
+  }
+}
+
+class _ZoneTypeDot extends StatelessWidget {
+  const _ZoneTypeDot({
+    required this.color,
+    required this.secondary,
+  });
+
+  final Color color;
+  final Color secondary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [color, secondary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.35),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+    );
   }
 }

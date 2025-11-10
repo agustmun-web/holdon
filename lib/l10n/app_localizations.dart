@@ -37,6 +37,10 @@ class AppLocalizations {
       'es': 'Mapa',
       'en': 'Map',
     },
+    'tab.customZones': {
+      'es': 'Zonas',
+      'en': 'Zones',
+    },
     'tab.zones': {
       'es': 'Zonas',
       'en': 'Zones',
@@ -276,6 +280,106 @@ class AppLocalizations {
     'map.retry': {
       'es': 'Reintentar',
       'en': 'Retry',
+    },
+    'map.customZone.title': {
+      'es': 'Nueva zona personalizada',
+      'en': 'New custom zone',
+    },
+    'map.customZone.nameLabel': {
+      'es': 'Nombre de la zona',
+      'en': 'Zone name',
+    },
+    'map.customZone.nameHint': {
+      'es': 'Ej. Gimnasio',
+      'en': 'e.g. Gym',
+    },
+    'map.customZone.radiusLabel': {
+      'es': 'Radio: {meters} m',
+      'en': 'Radius: {meters} m',
+    },
+    'map.customZone.typeLabel': {
+      'es': 'Tipo de zona',
+      'en': 'Zone type',
+    },
+    'map.customZone.save': {
+      'es': 'Guardar zona',
+      'en': 'Save zone',
+    },
+    'map.customZone.error': {
+      'es': 'No se pudo guardar la zona. Inténtalo de nuevo.',
+      'en': 'Could not save the zone. Please try again.',
+    },
+    'map.customZone.saved': {
+      'es': 'Zona "{name}" guardada correctamente.',
+      'en': 'Zone "{name}" saved successfully.',
+    },
+    'map.customZone.validation.name': {
+      'es': 'Introduce un nombre para la zona.',
+      'en': 'Please enter a name for the zone.',
+    },
+    'map.customZone.info.title': {
+      'es': 'Zona: {name}',
+      'en': 'Zone: {name}',
+    },
+    'map.customZone.info.type': {
+      'es': 'Tipo: {type}',
+      'en': 'Type: {type}',
+    },
+    'map.customZone.info.radius': {
+      'es': 'Radio: {meters} m',
+      'en': 'Radius: {meters} m',
+    },
+    'map.customZone.type.gym': {
+      'es': 'Gimnasio',
+      'en': 'Gym',
+    },
+    'map.customZone.type.home': {
+      'es': 'Casa',
+      'en': 'Home',
+    },
+    'map.customZone.type.work': {
+      'es': 'Trabajo',
+      'en': 'Work',
+    },
+    'map.customZone.type.other': {
+      'es': 'Otro',
+      'en': 'Other',
+    },
+    'customZones.title': {
+      'es': 'Mis zonas',
+      'en': 'My zones',
+    },
+    'customZones.empty': {
+      'es': 'Aún no has creado zonas personalizadas. Mantén pulsado en el mapa para añadir una.',
+      'en': 'You have not created any custom zones yet. Long press on the map to add one.',
+    },
+    'customZones.info.type': {
+      'es': 'Tipo',
+      'en': 'Type',
+    },
+    'customZones.info.radius': {
+      'es': 'Radio',
+      'en': 'Radius',
+    },
+    'customZones.info.coordinates': {
+      'es': 'Coordenadas',
+      'en': 'Coordinates',
+    },
+    'customZones.delete.title': {
+      'es': 'Eliminar zona "{name}"',
+      'en': 'Delete zone "{name}"',
+    },
+    'customZones.delete.message': {
+      'es': '¿Seguro que quieres eliminar esta zona personalizada?',
+      'en': 'Are you sure you want to delete this custom zone?',
+    },
+    'customZones.delete.confirm': {
+      'es': 'Eliminar',
+      'en': 'Delete',
+    },
+    'customZones.delete.success': {
+      'es': 'Zona "{name}" eliminada correctamente.',
+      'en': 'Zone "{name}" was deleted successfully.',
     },
     'map.hotspot.title': {
       'es': 'Zona de Hotspot',

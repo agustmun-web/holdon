@@ -45,13 +45,16 @@ class CustomZone {
   }
 
   factory CustomZone.fromMap(Map<String, dynamic> map) {
+    final String? rawZoneType = (map['zoneType'] ?? map['zone_type']) as String?;
     return CustomZone(
       id: map['id'] as int?,
       name: map['name'] as String,
       latitude: (map['latitude'] as num).toDouble(),
       longitude: (map['longitude'] as num).toDouble(),
       radius: (map['radius'] as num).toDouble(),
-      zoneType: map['zone_type'] as String,
+      zoneType: rawZoneType?.trim().isNotEmpty == true
+          ? rawZoneType!.trim()
+          : 'other',
     );
   }
 }

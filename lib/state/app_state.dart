@@ -15,24 +15,3 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 }
-
-class AppStateProvider extends InheritedNotifier<AppState> {
-  const AppStateProvider({
-    super.key,
-    required AppState appState,
-    required Widget child,
-  }) : super(notifier: appState, child: child);
-
-  static AppState of(BuildContext context) {
-    final provider = context.dependOnInheritedWidgetOfExactType<AppStateProvider>();
-    assert(provider != null, 'AppStateProvider not found in context');
-    return provider!.notifier!;
-  }
-
-  @override
-  bool updateShouldNotify(covariant AppStateProvider oldWidget) {
-    return notifier != oldWidget.notifier;
-  }
-}
-
-
