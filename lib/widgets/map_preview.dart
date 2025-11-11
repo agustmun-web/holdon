@@ -5,6 +5,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../l10n/app_localizations.dart';
 import '../services/geofence_service.dart';
+import '../services/custom_zone_service.dart';
+import '../models/custom_zone.dart';
 
 class MapPreview extends StatefulWidget {
   const MapPreview({super.key});
@@ -23,6 +25,8 @@ class _MapPreviewState extends State<MapPreview> {
   final Set<Circle> _circles = {};
   double _currentZoom = 12.0;
   final GeofenceService _geofenceService = GeofenceService();
+  final CustomZoneService _customZoneService = CustomZoneService.instance;
+  late final VoidCallback _customZonesListener;
   
   // Ubicación por defecto (Madrid, España)
   static const LatLng _defaultLocation = LatLng(40.4168, -3.7038);
@@ -54,6 +58,14 @@ class _MapPreviewState extends State<MapPreview> {
   @override
   void initState() {
     super.initState();
+    _customZonesListener = () {
+      _syncCustomZones(_customZoneService.zones);
+    };
+    _customZoneService.ensureInitialized().then((_) {
+      if (!mounted) return;
+      _syncCustomZones(_customZoneService.zones);
+      _customZoneService.zonesNotifier.addListener(_customZonesListener);
+    });
     _initializeMap();
   }
 
@@ -192,32 +204,82 @@ class _MapPreviewState extends State<MapPreview> {
   /// Crea los círculos de hotspots en el mapa de vista previa
   void _createHotspotCircles() {
     final List<Circle> hotspotCircles = [];
-    
+
     for (final hotspot in _geofenceService.hotspotsList) {
       // Determinar el color según la actividad
-      final Color circleColor = hotspot.activity == 'ALTA' 
+      final Color circleColor = hotspot.activity == 'ALTA'
           ? const Color(0xFFFF2100) // Rojo para ALTA
           : const Color(0xFFFFC700); // Amarillo para MODERADA
-      
+
       // Crear el círculo
       final Circle circle = Circle(
         circleId: CircleId('preview_${hotspot.id}'),
         center: LatLng(hotspot.latitude, hotspot.longitude),
         radius: hotspot.radius,
-        fillColor: circleColor.withValues(alpha: 0.2), // Color de relleno semi-transparente
+        fillColor:
+            circleColor.withValues(alpha: 0.2), // Color de relleno semi-transparente
         strokeColor: circleColor, // Color del borde
         strokeWidth: 2, // Borde más delgado para la vista previa
         consumeTapEvents: true,
         onTap: () => _showHotspotInfo(hotspot),
       );
-      
+
       hotspotCircles.add(circle);
     }
-    
+
+    for (final CustomZone zone in _customZoneService.zones) {
+      if (zone.id == null) continue;
+      hotspotCircles.add(_createCustomCircle(zone));
+    }
+
     setState(() {
       _circles.clear();
       _circles.addAll(hotspotCircles);
     });
+  }
+
+  void _syncCustomZones(List<CustomZone> zones) {
+    final List<Circle> updatedCircles = _circles
+        .where((circle) => !circle.circleId.value.startsWith('custom_preview_'))
+        .toList();
+
+    for (final CustomZone zone in zones) {
+      if (zone.id == null) continue;
+      updatedCircles.add(_createCustomCircle(zone));
+    }
+
+    setState(() {
+      _circles
+        ..clear()
+        ..addAll(updatedCircles);
+    });
+  }
+
+  Circle _createCustomCircle(CustomZone zone) {
+    final Color circleColor = _colorForZoneType(zone.zoneType);
+    return Circle(
+      circleId: CircleId('custom_preview_${zone.id}'),
+      center: LatLng(zone.latitude, zone.longitude),
+      radius: zone.radius,
+      fillColor: circleColor.withValues(alpha: 0.15),
+      strokeColor: circleColor,
+      strokeWidth: 2,
+      consumeTapEvents: true,
+      onTap: () => _showCustomZoneInfo(zone),
+    );
+  }
+
+  Color _colorForZoneType(String zoneType) {
+    switch (zoneType) {
+      case 'gym':
+        return const Color(0xFF2563EB);
+      case 'home':
+        return const Color(0xFF22C55E);
+      case 'work':
+        return const Color(0xFFF97316);
+      default:
+        return const Color(0xFF6B7280);
+    }
   }
 
   /// Muestra información del hotspot cuando se toca en la vista previa
@@ -534,8 +596,69 @@ class _MapPreviewState extends State<MapPreview> {
     _mapController?.dispose();
     _mapController = null;
     // Limpiar círculos para liberar recursos
+    _customZoneService.zonesNotifier.removeListener(_customZonesListener);
     _circles.clear();
     _markers.clear();
     super.dispose();
+  }
+
+  void _showCustomZoneInfo(CustomZone zone) {
+    final l10n = context.l10n;
+    final Map<String, String> typeLabels = {
+      'gym': l10n.translate('map.customZone.type.gym'),
+      'home': l10n.translate('map.customZone.type.home'),
+      'work': l10n.translate('map.customZone.type.work'),
+      'other': l10n.translate('map.customZone.type.other'),
+    };
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            l10n.translate(
+              'map.customZone.info.title',
+              params: {'name': zone.name},
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.translate('customZones.info.type'),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(typeLabels[zone.zoneType] ?? zone.zoneType),
+              const SizedBox(height: 8),
+              Text(
+                l10n.translate('customZones.info.radius'),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                l10n.translate(
+                  'map.customZone.info.radius',
+                  params: {'meters': zone.radius.toStringAsFixed(0)},
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                l10n.translate('customZones.info.coordinates'),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                '${zone.latitude.toStringAsFixed(5)}, ${zone.longitude.toStringAsFixed(5)}',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.translate('common.accept')),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
