@@ -10,6 +10,7 @@ import 'screens/custom_zones_screen.dart';
 import 'services/custom_zone_service.dart';
 import 'services/geofence_service.dart';
 import 'services/optimized_geofence_service.dart';
+import 'services/notification_manager.dart';
 import 'services/risk_status_manager.dart';
 import 'state/app_state.dart';
 
@@ -33,6 +34,8 @@ Future<void> main() async {
 
   syncCustomZones();
   customZoneService.zonesNotifier.addListener(syncCustomZones);
+
+  await NotificationManager.instance.ensureInitialized();
 
   final appState = AppState();
 

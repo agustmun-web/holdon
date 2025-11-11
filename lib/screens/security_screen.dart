@@ -53,6 +53,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
     _securityService.activateSecurity(showSensorValues: true);
     // Establecer sensibilidad normal por defecto
     _securityService.setSensitivityLevel("NORMAL");
+    SecurityService().isSecurityActiveNotifier.addListener(_handleSecurityStateChange);
 
     // Timer para actualizar la UI cada segundo (para mostrar estado de alarma)
     _uiUpdateTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -222,144 +223,60 @@ class _SecurityScreenState extends State<SecurityScreen> {
                 const SizedBox(height: 24),
 
                 // Control central
-                Center(
-                  child: CentralControl(
-                    isActive: isActive,
-                    isAlarmActive: _securityService.isAlarmActive,
-                    onTap: () async {
-                      // Si hay alarma activa, detener la alarma y desactivar el sistema
-                      if (_securityService.isAlarmActive) {
-                        await _securityService.stopAlarmOnly();
-                        // Desactivar el sistema de seguridad (botón rojo)
-                        setState(() {
-                          isActive = false;
-                        });
-                        _securityService.deactivateSecurity();
-                      } else {
-                        // Callback del botón principal - cambiar estado a Pausado/Inactivo
-                        setState(() {
-                          isActive = !isActive;
-                        });
+                ValueListenableBuilder<bool>(
+                  valueListenable:
+                      SecurityService().isSecurityActiveNotifier,
+                  builder: (context, isActiveValue, _) {
+                    final bool isActiveEffective = isActiveValue;
+                    final bool isAlarm = _securityService.isAlarmActive;
+                    return Column(
+                      children: [
+                        CentralControl(
+                          isActive: isActiveEffective,
+                          isAlarmActive: isAlarm,
+                          onTap: () async {
+                            if (isAlarm) {
+                              await _securityService.stopAlarmOnly();
+                              setState(() {
+                                isActive = false;
+                              });
+                              _securityService.deactivateSecurity();
+                            } else {
+                              final bool newState = !isActiveEffective;
+                              setState(() {
+                                isActive = newState;
+                              });
 
-                        // Activar/desactivar el sistema de seguridad real
-                        if (isActive) {
-                          _securityService.activateSecurity(
-                            showSensorValues: true,
-                          );
-                        } else {
-                          _securityService.deactivateSecurity();
-                        }
-                      }
-                    },
-                    onAnimationCallback: (callback) {
-                      _onCentralButtonAnimation = callback;
-                    },
-                  ),
+                              if (newState) {
+                                _securityService.activateSecurity(
+                                  showSensorValues: true,
+                                );
+                              } else {
+                                _securityService.deactivateSecurity();
+                              }
+                            }
+                          },
+                          onAnimationCallback: (callback) {
+                            _onCentralButtonAnimation = callback;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        _buildSystemStatus(isActiveEffective),
+                      ],
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 16),
 
-                // Estado del sistema
-                Center(
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _securityService.isAlarmActive
-                              ? const Color(
-                                  0xFF2A1A0A,
-                                ) // Naranja oscuro para alarma
-                              : isActive
-                              ? const Color(
-                                  0xFF061B17,
-                                ) // Verde oscuro para activo
-                              : const Color(
-                                  0xFF2A1A1A,
-                                ), // Rojo oscuro para inactivo
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _securityService.isAlarmActive
-                                    ? const Color(
-                                        0xFFFF8C00,
-                                      ) // Naranja para alarma
-                                    : isActive
-                                    ? const Color(
-                                        0xFF21C55E,
-                                      ) // Verde para activo
-                                    : const Color(
-                                        0xFFFF5B5B,
-                                      ), // Rojo para inactivo
-                                border: Border.all(
-                                  color: _securityService.isAlarmActive
-                                      ? const Color(
-                                          0xFF4A1A0A,
-                                        ) // Naranja muy oscuro para alarma
-                                      : isActive
-                                      ? const Color(
-                                          0xFF0B3622,
-                                        ) // Verde muy oscuro para activo
-                                      : const Color(
-                                          0xFF4A1A1A,
-                                        ), // Rojo muy oscuro para inactivo
-                                  width: 2,
-                                ),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _securityService.isAlarmActive
-                                  ? l10n.translate('security.system.alarm')
-                                  : isActive
-                                  ? l10n.translate('security.system.active')
-                                  : l10n.translate('security.system.paused'),
-                              style: TextStyle(
-                                color: _securityService.isAlarmActive
-                                    ? const Color(
-                                        0xFFFFB366,
-                                      ) // Naranja claro para alarma
-                                    : isActive
-                                    ? const Color(
-                                        0xFF9BE7C8,
-                                      ) // Verde claro para activo
-                                    : const Color(
-                                        0xFFFFB3B3,
-                                      ), // Rojo claro para inactivo
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
                 // Widget de sistema desactivado (solo cuando está desactivado)
-                if (!isActive) ...[
+                if (!SecurityService().isSecurityActiveNotifier.value) ...[
                   const SizedBox(height: 24),
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16),
                     child: DeactivatedSystemWidget(
                       onReactivateNow: () {
                         // Activar el sistema
-                        setState(() {
-                          isActive = true;
-                        });
-
-                        // Activar el sistema de seguridad real
                         _securityService.activateSecurity(
                           showSensorValues: true,
                         );
@@ -399,7 +316,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
 
                 const SizedBox(height: 16),
 
-                if (isActive) ...[
+                if (SecurityService().isSecurityActiveNotifier.value) ...[
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16),
                     child: const MapPreview(),
@@ -411,6 +328,96 @@ class _SecurityScreenState extends State<SecurityScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSystemStatus(bool isActive) {
+    final l10n = context.l10n;
+    return Center(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            decoration: BoxDecoration(
+              color: _securityService.isAlarmActive
+                  ? const Color(
+                      0xFF2A1A0A,
+                    ) // Naranja oscuro para alarma
+                  : isActive
+                  ? const Color(
+                      0xFF061B17,
+                    ) // Verde oscuro para activo
+                  : const Color(
+                      0xFF2A1A1A,
+                    ), // Rojo oscuro para inactivo
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _securityService.isAlarmActive
+                        ? const Color(
+                            0xFFFF8C00,
+                          ) // Naranja para alarma
+                        : isActive
+                        ? const Color(
+                            0xFF21C55E,
+                          ) // Verde para activo
+                        : const Color(
+                            0xFFFF5B5B,
+                          ), // Rojo para inactivo
+                    border: Border.all(
+                      color: _securityService.isAlarmActive
+                          ? const Color(
+                              0xFF4A1A0A,
+                            ) // Naranja muy oscuro para alarma
+                          : isActive
+                          ? const Color(
+                              0xFF0B3622,
+                            ) // Verde muy oscuro para activo
+                          : const Color(
+                              0xFF4A1A1A,
+                            ), // Rojo muy oscuro para inactivo
+                      width: 2,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _securityService.isAlarmActive
+                      ? l10n.translate('security.system.alarm')
+                      : isActive
+                      ? l10n.translate('security.system.active')
+                      : l10n.translate('security.system.paused'),
+                  style: TextStyle(
+                    color: _securityService.isAlarmActive
+                        ? const Color(
+                            0xFFFFB366,
+                          ) // Naranja claro para alarma
+                        : isActive
+                        ? const Color(
+                            0xFF9BE7C8,
+                          ) // Verde claro para activo
+                        : const Color(
+                            0xFFFFB3B3,
+                          ), // Rojo claro para inactivo
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -703,11 +710,17 @@ class _SecurityScreenState extends State<SecurityScreen> {
     // Limpiar timers
     _reactivationTimer?.cancel();
     _uiUpdateTimer?.cancel();
+    SecurityService().isSecurityActiveNotifier.removeListener(_handleSecurityStateChange);
 
     // Desactivar el sistema de seguridad
     _securityService.deactivateSecurity();
 
     // Limpiar recursos del widget de seguridad
     super.dispose();
+  }
+
+  void _handleSecurityStateChange() {
+    if (!mounted) return;
+    setState(() {});
   }
 }

@@ -204,13 +204,13 @@ class _MapPreviewState extends State<MapPreview> {
   /// Crea los círculos de hotspots en el mapa de vista previa
   void _createHotspotCircles() {
     final List<Circle> hotspotCircles = [];
-
+    
     for (final hotspot in _geofenceService.hotspotsList) {
       // Determinar el color según la actividad
-      final Color circleColor = hotspot.activity == 'ALTA'
+      final Color circleColor = hotspot.activity == 'ALTA' 
           ? const Color(0xFFFF2100) // Rojo para ALTA
           : const Color(0xFFFFC700); // Amarillo para MODERADA
-
+      
       // Crear el círculo
       final Circle circle = Circle(
         circleId: CircleId('preview_${hotspot.id}'),
@@ -223,7 +223,7 @@ class _MapPreviewState extends State<MapPreview> {
         consumeTapEvents: true,
         onTap: () => _showHotspotInfo(hotspot),
       );
-
+      
       hotspotCircles.add(circle);
     }
 
@@ -231,7 +231,7 @@ class _MapPreviewState extends State<MapPreview> {
       if (zone.id == null) continue;
       hotspotCircles.add(_createCustomCircle(zone));
     }
-
+    
     setState(() {
       _circles.clear();
       _circles.addAll(hotspotCircles);

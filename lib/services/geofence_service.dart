@@ -3,19 +3,17 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:geofencing_api/geofencing_api.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../models/custom_zone.dart';
+import 'notification_manager.dart';
+import 'security_service.dart';
 
 class GeofenceService {
   static final GeofenceService _instance = GeofenceService._internal();
   factory GeofenceService() => _instance;
   GeofenceService._internal();
-
-  final FlutterLocalNotificationsPlugin _localNotifications =
-      FlutterLocalNotificationsPlugin();
 
   bool _isInitialized = false;
   bool _isMonitoring = false;
@@ -91,7 +89,7 @@ class GeofenceService {
 
     try {
       // Inicializar notificaciones locales
-      await _initializeNotifications();
+      await NotificationManager.instance.ensureInitialized();
 
       // Solicitar permisos necesarios
       await _requestPermissions();
@@ -103,31 +101,6 @@ class GeofenceService {
       debugPrint('❌ Error al inicializar GeofenceService: $e');
       return false;
     }
-  }
-
-  /// Inicializa las notificaciones locales
-  Future<void> _initializeNotifications() async {
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings(
-          requestAlertPermission: true,
-          requestBadgePermission: true,
-          requestSoundPermission: true,
-        );
-
-    const InitializationSettings settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    await _localNotifications.initialize(
-      settings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
-    );
-
-    debugPrint('🔔 Notificaciones locales inicializadas');
   }
 
   /// Solicita los permisos necesarios
@@ -242,9 +215,6 @@ class GeofenceService {
         '🚨 Monitoreo de zonas iniciado - ${regions.length} zonas activas',
       );
 
-      // Mostrar notificación de confirmación
-      await _showStartupNotification();
-
       return true;
     } catch (e) {
       debugPrint('❌ Error al iniciar monitoreo: $e');
@@ -286,12 +256,21 @@ class GeofenceService {
       // Encontrar el hotspot correspondiente
       final GeofenceHotspot? hotspot = service._findHotspot(region.id);
       if (hotspot != null) {
-        // Disparar notificación específica según el nivel de riesgo
-        if (hotspot.activity == 'ALTA') {
-          await _showHighDangerZoneNotification(hotspot);
-        } else if (hotspot.activity == 'MODERADA') {
-          await _showModerateDangerZoneNotification(hotspot);
+        await NotificationManager.instance.showZoneEntryNotification(
+          hotspotName: hotspot.name,
+          severity: hotspot.activity,
+        );
+
+        final securityService = SecurityService();
+        if (!securityService.isSecurityActive) {
+          final activated = await securityService.activateSecurity(showSensorValues: true);
+          debugPrint(
+            activated
+                ? '✅ Sistema de seguridad activado automáticamente (foreground)'
+                : '⚠️ No se pudo activar el sistema automáticamente (foreground)',
+          );
         }
+
         return;
       }
 
@@ -302,128 +281,13 @@ class GeofenceService {
         );
         return;
       }
-    }
-  }
-
-  /// Muestra la notificación para zonas de ALTA peligrosidad
-  static Future<void> _showHighDangerZoneNotification(
-    GeofenceHotspot hotspot,
-  ) async {
-    debugPrint('🔴 Mostrando notificación ALTA para hotspot: ${hotspot.id}');
-
-    final GeofenceService instance = GeofenceService();
-    await instance._localNotifications.show(
-      hotspot.id.hashCode, // ID único para cada hotspot
-      'Alerta, estás en una zona de alta peligrosidad.',
-      'Activa el sistema para estar a salvo.',
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'high_danger_alerts',
-          'Alertas de Alta Peligrosidad',
-          channelDescription:
-              'Notificaciones de alerta para zonas de alta peligrosidad',
-          importance: Importance.max,
-          priority: Priority.max,
-          category: AndroidNotificationCategory.alarm,
-          fullScreenIntent: true,
-          ongoing: true,
-          autoCancel: false,
-          icon: '@mipmap/ic_launcher',
-          color: Color(0xFFFF2100), // Color rojo
-          playSound: true,
-          enableVibration: true,
-          showWhen: true,
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-          interruptionLevel: InterruptionLevel.critical,
-        ),
-      ),
-      payload: 'high_danger_alert:${hotspot.id}',
-    );
-  }
-
-  /// Muestra la notificación para zonas de MODERADA peligrosidad
-  static Future<void> _showModerateDangerZoneNotification(
-    GeofenceHotspot hotspot,
-  ) async {
-    debugPrint(
-      '🟡 Mostrando notificación MODERADA para hotspot: ${hotspot.id}',
-    );
-
-    final GeofenceService instance = GeofenceService();
-    await instance._localNotifications.show(
-      hotspot.id.hashCode, // ID único para cada hotspot
-      'Alerta, zona de peligrosidad moderada.',
-      'Activa el sistema para estar a salvo.',
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'moderate_danger_alerts',
-          'Alertas de Peligrosidad Moderada',
-          channelDescription:
-              'Notificaciones de alerta para zonas de peligrosidad moderada',
-          importance: Importance.high,
-          priority: Priority.high,
-          category: AndroidNotificationCategory.status,
-          ongoing: false,
-          autoCancel: true,
-          icon: '@mipmap/ic_launcher',
-          color: Color(0xFFFF8C00), // Color ámbar
-          playSound: true,
-          enableVibration: true,
-          showWhen: true,
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-          interruptionLevel: InterruptionLevel.timeSensitive,
-        ),
-      ),
-      payload: 'moderate_danger_alert:${hotspot.id}',
-    );
-  }
-
-  /// Muestra notificación de confirmación al iniciar el monitoreo
-  Future<void> _showStartupNotification() async {
-    await _localNotifications.show(
-      'startup'.hashCode,
-      '🔒 HoldOn - Protección Activa',
-      'Monitoreo de zonas activo. ${hotspots.length} zonas vigiladas.',
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'system_status',
-          'Estado del Sistema',
-          channelDescription: 'Notificaciones del estado del sistema',
-          importance: Importance.low,
-          priority: Priority.low,
-          icon: '@mipmap/ic_launcher',
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: false,
-          presentBadge: true,
-          presentSound: false,
-        ),
-      ),
-    );
-  }
-
-  /// Callback cuando se toca una notificación
-  void _onNotificationTapped(NotificationResponse response) {
-    debugPrint('📱 Notificación tocada: ${response.payload}');
-
-    if (response.payload != null) {
-      if (response.payload!.startsWith('high_danger_alert:')) {
-        debugPrint('🔴 Usuario tocó alerta de alta peligrosidad');
-        // Aquí puedes agregar lógica adicional para alertas de alta peligrosidad
-      } else if (response.payload!.startsWith('moderate_danger_alert:')) {
-        debugPrint('🟡 Usuario tocó alerta de peligrosidad moderada');
-        // Aquí puedes agregar lógica adicional para alertas moderadas
-      } else if (response.payload!.startsWith('hotspot_alert:')) {
-        debugPrint('🚨 Usuario tocó alerta de hotspot (legacy)');
-        // Mantener compatibilidad con el formato anterior
+    } else if (status == GeofenceStatus.exit) {
+      final GeofenceHotspot? hotspot = service._findHotspot(region.id);
+      if (hotspot != null) {
+        await NotificationManager.instance.showZoneExitNotification(
+          hotspotName: hotspot.name,
+        );
+        return;
       }
     }
   }

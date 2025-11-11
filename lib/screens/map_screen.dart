@@ -29,7 +29,7 @@ class _MapScreenState extends State<MapScreen> {
   final CustomZoneService _customZoneService = CustomZoneService.instance;
   Set<Circle> _customCircles = <Circle>{};
   late final VoidCallback _customZonesListener;
-
+  
   // Ubicación por defecto (Madrid, España)
   static const LatLng _defaultLocation = LatLng(40.4168, -3.7038);
   static const List<String> _zoneTypeKeys = <String>[
@@ -106,7 +106,7 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _currentPosition = LatLng(position.latitude, position.longitude);
       });
-
+      
       // Centrar automáticamente en la ubicación del usuario
       if (_mapController != null && mounted) {
         _goToMyLocation();
@@ -120,7 +120,7 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-
+    
     // Centrar automáticamente en la ubicación del usuario al crear el mapa
     if (_currentPosition != null) {
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -139,7 +139,7 @@ class _MapScreenState extends State<MapScreen> {
             CameraPosition(target: _currentPosition!, zoom: 15.0),
           ),
         );
-
+        
         if (mounted) {
           HapticFeedback.lightImpact();
         }
@@ -220,7 +220,7 @@ class _MapScreenState extends State<MapScreen> {
               trafficEnabled: false,
               onLongPress: _handleMapLongPress,
             ),
-
+          
           // Botón flotante para centrar en mi ubicación
           if (!_isLoading && _errorKey == null)
             Positioned(
@@ -239,22 +239,22 @@ class _MapScreenState extends State<MapScreen> {
 
   Set<Circle> _buildHotspotCircles() {
     final Set<Circle> circles = <Circle>{};
-
+    
     for (final hotspot in _geofenceService.hotspotsList) {
-      final Color circleColor = hotspot.activity == 'ALTA'
+      final Color circleColor = hotspot.activity == 'ALTA' 
           ? const Color(0xFFFF2100)
           : const Color(0xFFFFC700);
-
+      
       circles.add(
         Circle(
-          circleId: CircleId(hotspot.id),
-          center: LatLng(hotspot.latitude, hotspot.longitude),
-          radius: hotspot.radius,
+        circleId: CircleId(hotspot.id),
+        center: LatLng(hotspot.latitude, hotspot.longitude),
+        radius: hotspot.radius,
           fillColor: circleColor.withValues(alpha: 0.2),
           strokeColor: circleColor,
-          strokeWidth: 3,
-          consumeTapEvents: true,
-          onTap: () => _showHotspotInfo(hotspot),
+        strokeWidth: 3,
+        consumeTapEvents: true,
+        onTap: () => _showHotspotInfo(hotspot),
         ),
       );
     }
@@ -719,8 +719,8 @@ class _MapScreenState extends State<MapScreen> {
             children: [
               Icon(
                 Icons.warning,
-                color: hotspot.activity == 'ALTA'
-                    ? const Color(0xFFFF2100)
+                color: hotspot.activity == 'ALTA' 
+                    ? const Color(0xFFFF2100) 
                     : const Color(0xFFFFC700),
               ),
               const SizedBox(width: 8),
@@ -755,23 +755,23 @@ class _MapScreenState extends State<MapScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: hotspot.activity == 'ALTA'
+                  color: hotspot.activity == 'ALTA' 
                       ? const Color(0xFFFF2100).withValues(alpha: 0.1)
                       : const Color(0xFFFFC700).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: hotspot.activity == 'ALTA'
+                    color: hotspot.activity == 'ALTA' 
                         ? const Color(0xFFFF2100)
                         : const Color(0xFFFFC700),
                     width: 1,
                   ),
                 ),
                 child: Text(
-                  hotspot.activity == 'ALTA'
+                  hotspot.activity == 'ALTA' 
                       ? l10n.translate('map.hotspot.alert.high')
                       : l10n.translate('map.hotspot.alert.medium'),
                   style: TextStyle(
-                    color: hotspot.activity == 'ALTA'
+                    color: hotspot.activity == 'ALTA' 
                         ? const Color(0xFFFF2100)
                         : const Color(0xFFFFC700),
                     fontWeight: FontWeight.w500,

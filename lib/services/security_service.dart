@@ -20,6 +20,8 @@ class SecurityService {
   final AntiTheftManager _antiTheftManager = AntiTheftManager();
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isAlarmActive = false;
+  final ValueNotifier<bool> isSecurityActiveNotifier =
+      ValueNotifier<bool>(false);
   
   // Platform Channel para bloqueo de dispositivo
   static const MethodChannel _platformChannel = MethodChannel('holdon.device_lock');
@@ -44,10 +46,13 @@ class SecurityService {
   /// Activa el sistema de seguridad
   /// 
   /// [showSensorValues] - Si mostrar valores de sensores en terminal (default: true)
-  Future<void> activateSecurity({bool showSensorValues = true}) async {
+  Future<bool> activateSecurity({bool showSensorValues = true}) async {
     if (_antiTheftManager.isActive) {
       print('⚠️ El sistema de seguridad ya está activo');
-      return;
+      if (isSecurityActiveNotifier.value != true) {
+        isSecurityActiveNotifier.value = true;
+      }
+      return true;
     }
     
     // Verificar permisos de administrador antes de activar
@@ -55,6 +60,11 @@ class SecurityService {
     if (!hasAdminPermissions) {
       print('⚠️ Permisos de administrador no otorgados. Solicitando permisos...');
       await _requestAdminPermission();
+      final bool permissionsGranted = await isDeviceAdminActive;
+      if (!permissionsGranted) {
+        print('❌ No se pueden activar los controles sin permisos de administrador');
+        return false;
+      }
     }
     
     try {
@@ -62,9 +72,12 @@ class SecurityService {
         callbacks: _SecurityCallbacks(this),
         showSensorValues: showSensorValues,
       );
+      isSecurityActiveNotifier.value = true;
       print('✅ Sistema de seguridad activado exitosamente');
+      return true;
     } catch (e) {
       print('❌ Error al activar sistema de seguridad: $e');
+      return false;
     }
   }
   
@@ -72,6 +85,9 @@ class SecurityService {
   void deactivateSecurity() {
     _antiTheftManager.deactivateSecurity();
     _isAlarmActive = false;
+    if (isSecurityActiveNotifier.value != false) {
+      isSecurityActiveNotifier.value = false;
+    }
     print('✅ Sistema de seguridad desactivado');
   }
   
@@ -175,6 +191,9 @@ class _SecurityCallbacks implements AlarmCallbacks {
   @override
   void onAlarmTriggered() {
     _service._isAlarmActive = true;
+    if (_service.isSecurityActiveNotifier.value != true) {
+      _service.isSecurityActiveNotifier.value = true;
+    }
     
     // Activar vibración continua
     Vibration.vibrate(duration: 10000); // 10 segundos
