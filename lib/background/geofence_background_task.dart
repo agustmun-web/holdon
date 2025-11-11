@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:geofencing_api/geofencing_api.dart';
 import '../services/geofence_service.dart';
 import '../services/notification_manager.dart';
@@ -8,6 +9,8 @@ import '../services/security_service.dart';
 /// Este archivo se ejecuta incluso cuando la aplicación está cerrada
 @pragma('vm:entry-point')
 Future<void> geofenceBackgroundTask(GeofenceRegion region, GeofenceStatus status, Location location) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationManager.instance.ensureInitialized();
   debugPrint('🔄 [BACKGROUND] Evento de geofencing procesado: ${region.id} - $status');
   
   if (GeofenceService.notificationsSuppressed) {

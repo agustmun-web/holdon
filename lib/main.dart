@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'background/geofence_background_task.dart';
@@ -92,26 +93,54 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   final OptimizedGeofenceService _optimizedGeofenceService =
       OptimizedGeofenceService();
+  static const MethodChannel _locationServiceChannel =
+      MethodChannel('holdon/location_service');
 
   late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _screens = [
       const SecurityScreen(),
       const MapScreen(),
       const CustomZonesScreen(),
     ];
-    _initializeOptimizedGeofenceService();
+    _initializeServices();
   }
 
-  /// Inicializa el servicio de geofencing optimizado
-  Future<void> _initializeOptimizedGeofenceService() async {
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    switch (state) {
+      case AppLifecycleState.resumed:
+        debugPrint('🔄 App resumed - verificando servicio de ubicación');
+        _ensureForegroundServiceRunning();
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        debugPrint('💤 App en segundo plano - servicio de ubicación permanece activo');
+        break;
+      case AppLifecycleState.detached:
+        debugPrint('🔌 App detached - el servicio permanece activo');
+        break;
+    }
+  }
+
+  /// Inicializa geofencing y garantiza que el servicio de ubicación nativo corra en primer plano
+  Future<void> _initializeServices() async {
     try {
       debugPrint('🚀 Inicializando servicio de geofencing optimizado...');
 
@@ -129,14 +158,59 @@ class _MainScreenState extends State<MainScreen> {
 
         if (monitoringStarted) {
           debugPrint('🎯 Monitoreo de geofencing optimizado iniciado');
+          await _startNativeLocationService();
         } else {
           debugPrint('⚠️ Error al iniciar monitoreo de geofencing');
         }
       } else {
         debugPrint('❌ Error al inicializar servicio de geofencing optimizado');
       }
+
+      await _requestLocationUpdate();
     } catch (e) {
       debugPrint('❌ Excepción al inicializar geofencing optimizado: $e');
+    }
+  }
+
+  /// Inicia el servicio nativo de ubicación en primer plano
+  Future<void> _startNativeLocationService() async {
+    try {
+      debugPrint('📱 Iniciando servicio nativo de ubicación...');
+      final result =
+          await _locationServiceChannel.invokeMethod('startLocationService');
+      if (result == true) {
+        debugPrint('✅ Servicio nativo de ubicación iniciado');
+      } else {
+        debugPrint('⚠️ No se pudo iniciar el servicio nativo de ubicación');
+      }
+    } catch (e) {
+      debugPrint('❌ Error al iniciar servicio nativo de ubicación: $e');
+    }
+  }
+
+  /// Asegura que el servicio de ubicación en primer plano siga ejecutándose
+  Future<void> _ensureForegroundServiceRunning() async {
+    try {
+      final isRunning =
+          await _locationServiceChannel.invokeMethod('isLocationServiceRunning');
+      if (isRunning != true) {
+        debugPrint('🔄 Reiniciando servicio de ubicación en primer plano');
+        await _startNativeLocationService();
+      } else {
+        debugPrint('✅ Servicio de ubicación continúa activo');
+      }
+    } catch (e) {
+      debugPrint('❌ Error al verificar servicio nativo de ubicación: $e');
+    }
+  }
+
+  /// Solicita una actualización manual de ubicación
+  Future<void> _requestLocationUpdate() async {
+    try {
+      await _locationServiceChannel.invokeMethod('requestLocationUpdate');
+      debugPrint('📍 Actualización manual de ubicación solicitada');
+    } catch (e) {
+      debugPrint('❌ Error al solicitar actualización manual: $e');
     }
   }
 

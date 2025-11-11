@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -31,11 +33,28 @@ class LocationService {
       debugPrint('🚀 Iniciando monitoreo activo de ubicación...');
 
       // Configuración de máxima precisión
-      const locationSettings = LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 5, // Actualizar cada 5 metros
-        timeLimit: const Duration(seconds: 10),
-      );
+      final LocationSettings locationSettings;
+      if (Platform.isAndroid) {
+        locationSettings = AndroidSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 0,
+          intervalDuration: const Duration(seconds: 2),
+          timeLimit: const Duration(seconds: 10),
+          foregroundNotificationConfig: const ForegroundNotificationConfig(
+            notificationTitle: 'HoldOn activo',
+            notificationText: 'Monitoreando zonas de seguridad',
+            enableWakeLock: true,
+            setOngoing: true,
+            notificationChannelName: 'HoldOn Tracking',
+          ),
+        );
+      } else {
+        locationSettings = const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 0,
+          timeLimit: Duration(seconds: 10),
+        );
+      }
 
       // Iniciar stream de ubicación continuo
       _positionStream = Geolocator.getPositionStream(
@@ -52,7 +71,7 @@ class LocationService {
 
       // Timer de keep-alive cada 30 segundos
       _keepAliveTimer = Timer.periodic(
-        const Duration(seconds: 30),
+        const Duration(seconds: 15),
         (timer) => _performKeepAlive(),
       );
 
@@ -83,13 +102,31 @@ class LocationService {
   /// Obtiene la ubicación actual
   Future<Position?> getCurrentPosition() async {
     try {
-      const locationSettings = LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 5),
-      );
+      final LocationSettings settings;
+      if (Platform.isAndroid) {
+        settings = AndroidSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 0,
+          timeLimit: const Duration(seconds: 5),
+          intervalDuration: const Duration(seconds: 2),
+          foregroundNotificationConfig: const ForegroundNotificationConfig(
+            notificationTitle: 'HoldOn activo',
+            notificationText: 'Manteniendo tu ubicación precisa',
+            enableWakeLock: true,
+            setOngoing: true,
+            notificationChannelName: 'HoldOn Tracking',
+          ),
+        );
+      } else {
+        settings = const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 0,
+          timeLimit: Duration(seconds: 5),
+        );
+      }
 
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: locationSettings,
+        locationSettings: settings,
       );
       
       _lastPosition = position;
